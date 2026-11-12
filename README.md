@@ -58,3 +58,4 @@ Roteiro manual: cadastrar um livro; recarregar e confirmar persistência; editar
 ## Próxima fase — depende de autorização
 
 React e Bootstrap no frontend; ASP.NET Core Web API com C#, Entity Framework Core e MySQL no backend. Cadastro/login, autenticação segura e autorização por usuário deverão garantir que cada biblioteca seja acessível somente ao seu proprietário. A Fase 2 ainda não foi iniciada.
+A versão de demonstração usa o GitHub Pages.
