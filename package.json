@@ -1,0 +1,8 @@
+{
+  "name": "minha-biblioteca-online",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test tests/core.test.js", "start": "npx --yes http-server . -c-1" },
+  "description": "Biblioteca pessoal com HTML, Bootstrap 5 e JavaScript."
+}
