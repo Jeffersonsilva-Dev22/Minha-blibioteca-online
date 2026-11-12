@@ -1,6 +1,11 @@
 export const STATUSES = ['Quero ler', 'Lendo', 'Concluído', 'Abandonado'];
 export const KEY = 'minha-biblioteca:v1';
 export const normalize = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+export function bookTitle(book) {
+  const subtitle = book.subtitle?.trim();
+  return subtitle ? `${book.title}: ${subtitle}` : book.title;
+}
+
 export function validate(book) {
   if (!book.title?.trim() || !book.author?.trim() || !book.genre?.trim()) throw Error('Preencha título, autor e gênero.');
   for (const field of ['pages','currentPage','year','rating']) if (!Number.isInteger(book[field])) throw Error('Use números inteiros nos campos numéricos.');
@@ -10,7 +15,7 @@ export function validate(book) {
   if (book.startDate && !validDate(book.startDate) || book.endDate && !validDate(book.endDate)) throw Error('Data inválida.');
   if (book.startDate && book.endDate && book.endDate < book.startDate) throw Error('A conclusão não pode ser anterior ao início.');
   if (book.cover && !/^https?:\/\//i.test(book.cover)) throw Error('A capa deve usar um endereço http ou https.');
-  return {...book, title:book.title.trim(), author:book.author.trim(), genre:book.genre.trim(), currentPage:book.status === 'Concluído' ? book.pages : book.currentPage};
+  return {...book, title:book.title.trim(), subtitle:typeof book.subtitle === 'string' ? book.subtitle.trim() : '', author:book.author.trim(), genre:book.genre.trim(), currentPage:book.status === 'Concluído' ? book.pages : book.currentPage};
 }
 function validDate(value) { return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value; }
 export function stats(books) {
@@ -19,7 +24,7 @@ export function stats(books) {
 }
 export function queryBooks(books, {search='',genre='',status='',sort='recent'}={}) {
   const term = normalize(search.trim());
-  return books.filter(b=>(!term||[b.title+" "+b.author, b.genre, b.subgenre].some(value => normalize(value).includes(term)))&&(!genre||b.genre===genre)&&(!status||b.status===status)).sort((a,b)=>sort==='rating'?b.rating-a.rating:sort==='title'||sort==='author'?a[sort].localeCompare(b[sort],'pt-BR'):b.createdAt.localeCompare(a.createdAt));
+  return books.filter(b=>(!term||[b.title + " " + b.author, bookTitle(b), b.subtitle, b.genre, b.subgenre].some(value => normalize(value).includes(term)))&&(!genre||b.genre===genre)&&(!status||b.status===status)).sort((a,b)=>sort==='rating'?b.rating-a.rating:sort==='title'?bookTitle(a).localeCompare(bookTitle(b),'pt-BR'):sort==='author'?a.author.localeCompare(b.author,'pt-BR'):b.createdAt.localeCompare(a.createdAt));
 }
 export function readBooks(storage) {
   const raw=storage.getItem(KEY); if (!raw) return [];

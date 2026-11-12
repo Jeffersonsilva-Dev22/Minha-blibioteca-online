@@ -1,3 +1,5 @@
+import {bookTitle} from './core.js';
+
 export const GENRES = new Map([
   ['Romance', ['Histórico', 'Psicológico', 'Romântico']],
   ['Fantasia', ['Épica', 'Urbana', 'Sombria']],
@@ -21,7 +23,7 @@ export function genreOptions(books) {
 }
 
 export function searchOptions(books) {
-  const bookTerms = books.flatMap(book => [book.title, book.author, book.subgenre]);
+  const bookTerms = books.flatMap(book => [book.title, book.subtitle, bookTitle(book), book.author, book.subgenre]);
   const genreTerms = [...GENRES.values()].flat();
   return [...new Set([...bookTerms, ...genreOptions(books), ...genreTerms].filter(Boolean))];
 }
