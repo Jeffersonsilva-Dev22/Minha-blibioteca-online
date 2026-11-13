@@ -1,6 +1,8 @@
+import {searchRank} from './search.js';
+
 export const STATUSES = ['Quero ler', 'Lendo', 'Concluído', 'Abandonado'];
 export const KEY = 'minha-biblioteca:v1';
-export const normalize = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+export {normalize} from './search.js';
 export function bookTitle(book) {
   const subtitle = book.subtitle?.trim();
   return subtitle ? `${book.title}: ${subtitle}` : book.title;
@@ -23,8 +25,8 @@ export function stats(books) {
   return {total:books.length, completed:books.filter(b=>b.status==='Concluído').length, reading:books.filter(b=>b.status==='Lendo').length, wanted:books.filter(b=>b.status==='Quero ler').length, pagesRead, progress:totalPages?Math.round(pagesRead/totalPages*100):0, average:rated.length?rated.reduce((n,b)=>n+b.rating,0)/rated.length:0, genres:books.reduce((g,b)=>(g[b.genre]=(g[b.genre]||0)+1,g),{})};
 }
 export function queryBooks(books, {search='',genre='',status='',sort='recent'}={}) {
-  const term = normalize(search.trim());
-  return books.filter(b=>(!term||[b.title + " " + b.author, bookTitle(b), b.subtitle, b.genre, b.subgenre].some(value => normalize(value).includes(term)))&&(!genre||b.genre===genre)&&(!status||b.status===status)).sort((a,b)=>sort==='rating'?b.rating-a.rating:sort==='title'?bookTitle(a).localeCompare(bookTitle(b),'pt-BR'):sort==='author'?a.author.localeCompare(b.author,'pt-BR'):b.createdAt.localeCompare(a.createdAt));
+  const term = search.trim();
+  return books.filter(b=>(!term||[b.title + " " + b.author, bookTitle(b), b.subtitle, b.genre, b.subgenre].some(value => Number.isFinite(searchRank(value, term))))&&(!genre||b.genre===genre)&&(!status||b.status===status)).sort((a,b)=>sort==='rating'?b.rating-a.rating:sort==='title'?bookTitle(a).localeCompare(bookTitle(b),'pt-BR'):sort==='author'?a.author.localeCompare(b.author,'pt-BR'):b.createdAt.localeCompare(a.createdAt));
 }
 export function readBooks(storage) {
   const raw=storage.getItem(KEY); if (!raw) return [];

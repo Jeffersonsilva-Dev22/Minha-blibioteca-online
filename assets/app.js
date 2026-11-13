@@ -1,8 +1,12 @@
+import {loadSearchHistory, rememberSearch, suggestSearch} from './search.js';
 import {GENRES, genreOptions, searchOptions} from './genres.js';
 import {bookTitle, STATUSES,validate,stats,queryBooks,readBooks,saveBooks} from './core.js';
 const $=s=>document.querySelector(s), esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let books=[], storageFailed=false, pendingDelete=null, view='grid';
 try {books=readBooks(localStorage);} catch {storageFailed=true;}
+let searchStorage;
+try { searchStorage = window.localStorage; } catch { /* Search still works without storage. */ }
+let searchHistory = loadSearchHistory(searchStorage);
 const filters={search:'',genre:'',status:'',sort:'recent'};
 const fieldDefinitions=[['title','Título principal','text',true],['subtitle','Subtítulo (opcional)','text'],['author','Autor','text',true],['genre','Categoria principal','genre',true],['subgenre','Subgênero','subgenre'],['year','Ano de publicação','number',true],['isbn','ISBN (opcional)','text'],['pages','Total de páginas','number',true],['currentPage','Página atual','number'],['cover','URL da capa (opcional)','url'],['status','Status de leitura','select'],['rating','Avaliação pessoal','rating'],['startDate','Início da leitura','date'],['endDate','Conclusão da leitura','date'],['synopsis','Sinopse','textarea'],['notes','Anotações pessoais','textarea']];
 $('#fields').innerHTML=fieldDefinitions.map(([name,label,type,required])=>`<label class="${type==='textarea'?'wide':''}">${label}${required?' *':''}${type==='genre'||type==='subgenre'?`<select name="${name}" class="form-select" ${required?'required':''}></select>`:type==='select'?`<select name="${name}" class="form-select">${STATUSES.map(s=>`<option>${s}</option>`).join('')}</select>`:type==='rating'?`<select name="rating" class="form-select"><option value="0">Sem avaliação</option>${[1,2,3,4,5].map(n=>`<option value="${n}">${n} ${n===1?'estrela':'estrelas'}</option>`).join('')}</select>`:type==='textarea'?`<textarea name="${name}" class="form-control" rows="3" maxlength="10000"></textarea>`:`<input name="${name}" type="${type}" class="form-control" ${required?'required':''} ${type==='number'?`min="${name==='currentPage'?0:1}" max="${name==='year'?9999:1000000}" step="1"`:''} ${type==='text'?'maxlength="300"':''}>`}</label>`).join('');
@@ -31,9 +35,75 @@ function metrics(s){return `<div class="metrics">${[['Livros na coleção',s.tot
 function empty(filtered=false){return `<div class="empty"><span>▤</span><h3>${filtered?'Nenhum livro encontrado':'Uma estante cheia de possibilidades'}</h3><p>${filtered?'Experimente outra pesquisa ou ajuste os filtros.':'Cadastre seu primeiro livro e comece a contar sua história de leitura.'}</p>${filtered?'':'<button class="btn btn-primary" data-action="add">+ Adicionar meu primeiro livro</button>'}</div>`;}
 function render(){const route=location.hash.slice(1)||'inicio',s=stats(books);document.querySelectorAll('nav a').forEach(a=>{const active=a.hash===`#${route}`;a.classList.toggle('active',active);if(active)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
 const warning=storageFailed?'<div class="alert alert-warning" role="alert">Não foi possível ler os dados locais. Para proteger sua coleção, o salvamento está bloqueado. Verifique as permissões e faça uma cópia dos dados do navegador antes de tentar recuperá-los.</div>':'';
-if(route==='biblioteca'){$('#main').innerHTML=warning+`<div class="page-heading"><div><span class="eyebrow">CADA LIVRO, UMA DESCOBERTA</span><h1>Minha biblioteca<span>.</span></h1><p>Todos os seus livros, em um só lugar.</p></div><span class="count">${s.total} livros na coleção</span></div><section class="filterbar" aria-label="Filtros da biblioteca"><label class="search">Pesquisar<input id="search" class="form-control" placeholder="Título, subtítulo, autor ou gênero…" value="${esc(filters.search)}" type="search" list="search-suggestions"></label><datalist id="search-suggestions">${searchOptions(books).map(term=>`<option value="${esc(term)}"></option>`).join('')}</datalist><label>Categoria<select id="genre" class="form-select"><option value="">Todas as categorias</option>${genreOptions(books).map(g=>`<option ${filters.genre===g?'selected':''}>${esc(g)}</option>`).join('')}</select></label><label>Status<select id="status" class="form-select"><option value="">Todos os status</option>${STATUSES.map(g=>`<option ${filters.status===g?'selected':''}>${g}</option>`).join('')}</select></label><label>Ordenar por<select id="sort" class="form-select">${[['recent','Mais recentes'],['title','Título'],['author','Autor'],['rating','Avaliação']].map(([v,l])=>`<option value="${v}" ${filters.sort===v?'selected':''}>${l}</option>`).join('')}</select></label><div class="view-switch" aria-label="Visualização"><button class="icon-button" data-action="grid" aria-label="Grade" aria-pressed="${view==='grid'}">▦</button><button class="icon-button" data-action="list" aria-label="Lista" aria-pressed="${view==='list'}">☰</button></div></section><p id="result-count" class="muted" aria-live="polite"></p><section id="catalog" aria-label="Livros"></section>`;['search','genre','status','sort'].forEach(id=>$('#'+id).addEventListener(id==='search'?'input':'change',e=>{filters[id]=e.target.value;renderCatalog();}));renderCatalog();}
+if(route==='biblioteca'){$('#main').innerHTML=warning+`<div class="page-heading"><div><span class="eyebrow">CADA LIVRO, UMA DESCOBERTA</span><h1>Minha biblioteca<span>.</span></h1><p>Todos os seus livros, em um só lugar.</p></div><span class="count">${s.total} livros na coleção</span></div><section class="filterbar" aria-label="Filtros da biblioteca"><form class="search catalog-search" id="search-form" role="search"><label for="search">Pesquisar</label><div class="search-controls"><input id="search" class="form-control" placeholder="Título, subtítulo, autor ou gênero…" value="${esc(filters.search)}" type="search" maxlength="300" autocomplete="off" aria-controls="search-suggestions"><button class="btn btn-primary" type="submit">Buscar</button></div><div id="search-suggestions" class="search-suggestions"></div></form><label>Categoria<select id="genre" class="form-select"><option value="">Todas as categorias</option>${genreOptions(books).map(g=>`<option ${filters.genre===g?'selected':''}>${esc(g)}</option>`).join('')}</select></label><label>Status<select id="status" class="form-select"><option value="">Todos os status</option>${STATUSES.map(g=>`<option ${filters.status===g?'selected':''}>${g}</option>`).join('')}</select></label><label>Ordenar por<select id="sort" class="form-select">${[['recent','Mais recentes'],['title','Título'],['author','Autor'],['rating','Avaliação']].map(([v,l])=>`<option value="${v}" ${filters.sort===v?'selected':''}>${l}</option>`).join('')}</select></label><div class="view-switch" aria-label="Visualização"><button class="icon-button" data-action="grid" aria-label="Grade" aria-pressed="${view==='grid'}">▦</button><button class="icon-button" data-action="list" aria-label="Lista" aria-pressed="${view==='list'}">☰</button></div></section><p id="result-count" class="muted" aria-live="polite"></p><section id="catalog" aria-label="Livros"></section>`;bindCatalogSearch();
+  for (const id of ['genre', 'status', 'sort']) {
+    $('#'+id).addEventListener('change', event => {
+      filters[id] = event.target.value;
+      renderCatalog();
+    });
+  }
+  renderCatalog();}
 else if(route==='estatisticas'){$('#main').innerHTML=warning+`<div class="page-heading"><div><span class="eyebrow">SUA JORNADA EM NÚMEROS</span><h1>Estatísticas<span>.</span></h1><p>Pequenas leituras. Grandes conquistas.</p></div></div>${metrics(s)}<div class="statistics-grid"><article class="panel"><h2>Seu ritmo de leitura</h2><div class="big-number">${s.pagesRead.toLocaleString('pt-BR')}<small>páginas lidas</small></div><p>Média das avaliações: <strong>${s.average?s.average.toFixed(1)+' / 5':'Sem avaliações'}</strong></p><p>Progresso das páginas da coleção: ${s.progress}%</p><progress max="100" value="${s.progress}" aria-label="Progresso geral"></progress></article><article class="panel"><h2>Histórias por gênero</h2>${Object.entries(s.genres).map(([g,n])=>`<div class="genre-row"><span>${esc(g)}</span><strong>${n}</strong><progress max="${s.total}" value="${n}" aria-label="${esc(g)}: ${n} livros"></progress></div>`).join('')||'<p class="muted">Os gêneros aparecerão após cadastrar seu primeiro livro.</p>'}</article></div><p class="muted mt-4">As estatísticas consideram somente os dados cadastrados. A média exclui livros sem avaliação; páginas lidas correspondem à página atual de cada livro.</p>`;}
 else {$('#main').innerHTML=warning+`<section class="welcome"><div><span class="eyebrow">BEM-VINDO À SUA BIBLIOTECA</span><h1>Boas histórias<br>merecem um lugar<span>.</span></h1><p>Organize seus livros, acompanhe suas leituras<br>e redescubra o prazer de cada página.</p><button class="btn btn-primary" data-action="add">+ Adicionar um livro</button></div><div class="hero-art" aria-hidden="true"><div class="art-orbit"></div><div class="art-book book-back">HISTÓRIAS<br>PARA GUARDAR</div><div class="art-book book-front"><span>UM NOVO CAPÍTULO</span><strong>Sua próxima<br>descoberta.</strong><i>✧</i></div><div class="art-caption">SUA ESTANTE, SEU UNIVERSO</div></div></section>${metrics(s)}<div class="section-heading"><div><span class="eyebrow">MAIS UM CAPÍTULO</span><h2>Continue sua leitura</h2></div><a href="#biblioteca">Ver biblioteca →</a></div><section class="reading-panel">${books.some(b=>b.status==='Lendo')?`<div class="catalog">${books.filter(b=>b.status==='Lendo').slice(0,3).map(card).join('')}</div>`:'<div class="reading-empty"><span>▤</span><div><h3>Qual será sua próxima leitura?</h3><p>Seus livros com status “Lendo” aparecem aqui.</p></div><a href="#biblioteca">Escolher um livro →</a></div>'}<div class="overall"><div><strong>Seu progresso geral</strong><span>${s.progress}% das páginas da coleção</span></div><progress max="100" value="${s.progress}" aria-label="Progresso geral"></progress></div></section><div class="section-heading"><div><span class="eyebrow">NOVIDADES NA ESTANTE</span><h2>Adicionados recentemente</h2></div><a href="#biblioteca">Ver todos →</a></div><section class="catalog">${books.length?queryBooks(books).slice(0,4).map(card).join(''):empty()}</section>`;}wireImages();}
+function bindCatalogSearch() {
+  const form = $('#search-form');
+  const input = $('#search');
+  const suggestions = $('#search-suggestions');
+  const options = searchOptions(books);
+
+  function renderSuggestions() {
+    const query = input.value.trim();
+    const terms = query ? suggestSearch(options, query) : searchHistory;
+    suggestions.hidden = terms.length === 0;
+    suggestions.innerHTML = terms.length
+      ? `<p>${query ? 'Sugestões' : 'Buscas recentes'}</p>${terms.map(term =>
+          `<button type="button" value="${esc(term)}">${esc(term)}</button>`
+        ).join('')}`
+      : '';
+  }
+
+  input.addEventListener('focus', renderSuggestions);
+  input.addEventListener('input', () => {
+    filters.search = input.value;
+    renderCatalog();
+    renderSuggestions();
+  });
+
+  function submitSearch() {
+    filters.search = input.value.trim();
+    input.value = filters.search;
+    searchHistory = rememberSearch(searchStorage, searchHistory, filters.search);
+    renderCatalog();
+    suggestions.hidden = true;
+  }
+
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    submitSearch();
+  });
+  suggestions.addEventListener('click', event => {
+    const option = event.target.closest('button');
+    if (!option) return;
+    input.value = option.value;
+    input.focus();
+    submitSearch();
+  });
+  form.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !suggestions.hidden) {
+      event.preventDefault();
+      input.focus();
+      suggestions.hidden = true;
+    } else if (event.key === 'ArrowDown' && event.target === input && !suggestions.hidden) {
+      const firstOption = suggestions.querySelector('button');
+      if (firstOption) {
+        event.preventDefault();
+        firstOption.focus();
+      }
+    }
+  });
+  renderSuggestions();
+}
+
 function renderCatalog(){const filtered=queryBooks(books,filters);$('#result-count').textContent=`${filtered.length} ${filtered.length===1?'livro encontrado':'livros encontrados'}`;$('#catalog').className='catalog '+(view==='list'?'list-view':'');$('#catalog').innerHTML=filtered.length?filtered.map(card).join(''):empty(books.length>0);wireImages();}
 function openEditor(id){const b=books.find(b=>b.id===id);form.reset();genreField.replaceChildren(new Option('Selecione uma categoria', ''));for(const genre of genreOptions(books))genreField.add(new Option(genre,genre));genreField.value=b?.genre??'';populateSubgenres(b?.subgenre);$('#form-error').textContent='';$('#editor-title').textContent=b?'Editar livro':'Adicionar livro';$('#book-form').elements.id.value='';$('#book-form').elements.currentPage.value=0;if(b)Object.entries(b).forEach(([k,v])=>{if($('#book-form').elements.namedItem(k))$('#book-form').elements.namedItem(k).value=v;});$('#details').close();$('#editor').showModal();}
 function showDetails(id){const b=books.find(b=>b.id===id);if(!b)return;$('#details').innerHTML=`<div class="dialog-heading"><span class="eyebrow">UM LIVRO DA SUA COLEÇÃO</span><button class="icon-button" data-action="close-details" aria-label="Fechar detalhes">×</button></div><div class="detail-layout">${cover(b)}<div><span class="book-genre">${esc(b.genre)}${b.subgenre?' · '+esc(b.subgenre):''}</span><h2 id="detail-title">${esc(bookTitle(b))}</h2><p>${esc(b.author)} · ${b.year}</p><span class="status status-${STATUSES.indexOf(b.status)}">${b.status}</span><p class="mt-3">${b.rating?'★'.repeat(b.rating)+' · '+b.rating+'/5':'Sem avaliação'}</p><p>ISBN: ${esc(b.isbn)||'Não informado'}</p><p>${b.currentPage} de ${b.pages} páginas · ${progress(b)}%</p><progress value="${b.currentPage}" max="${b.pages}" aria-label="Progresso da leitura"></progress><p class="mt-3">Início: ${formatDate(b.startDate)}<br>Conclusão: ${formatDate(b.endDate)}</p></div></div><h3 class="mt-4">Sinopse</h3><p class="preserve">${esc(b.synopsis)||'Nenhuma sinopse cadastrada.'}</p><h3>Anotações pessoais</h3><p class="preserve">${esc(b.notes)||'Nenhuma anotação por enquanto.'}</p><div class="dialog-actions"><button class="btn btn-outline-danger" data-action="delete" data-id="${esc(b.id)}">Excluir</button><button class="btn btn-primary" data-action="edit" data-id="${esc(b.id)}">Editar livro e progresso</button></div>`;$('#details').showModal();wireImages();}
