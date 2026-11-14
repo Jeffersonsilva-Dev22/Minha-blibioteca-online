@@ -3,7 +3,7 @@ import {readBooks} from './core.js';
 const DB_NAME = 'minha-biblioteca';
 const KEY = 'collection';
 const FORMAT = 'minha-biblioteca-backup';
-export const MAX_PDF = 25 * 1024 * 1024;
+export const MAX_PDF = 150 * 1024 * 1024;
 
 function requestResult(request) {
   return new Promise((resolve, reject) => {
@@ -78,7 +78,7 @@ export function getPdf(db, id) {
 }
 
 export async function validatePdf(file) {
-  if (file.size > MAX_PDF) throw Error('Escolha um PDF de até 25 MB.');
+  if (file.size > MAX_PDF) throw Error('Escolha um PDF de até 150 MB.');
   const signature = new TextDecoder().decode(await file.slice(0, 5).arrayBuffer());
   if (signature !== '%PDF-') throw Error('O arquivo escolhido não é um PDF válido.');
   return file.slice(0, file.size, 'application/pdf');
@@ -119,7 +119,11 @@ export async function readBackup(file) {
     if (!expected.delete(id) || typeof data !== 'string' || data.length > Math.ceil(MAX_PDF / 3) * 4) {
       throw Error('O backup contém anexos inválidos.');
     }
-    const bytes = Uint8Array.from(atob(data), char => char.charCodeAt(0));
+    const decoded = atob(data);
+    const bytes = new Uint8Array(decoded.length);
+    for (let offset = 0; offset < bytes.length; offset++) {
+      bytes[offset] = decoded.charCodeAt(offset);
+    }
     attachments.set(id, await validatePdf(new Blob([bytes])));
   }
   if (expected.size) throw Error('Há PDFs faltando no backup.');

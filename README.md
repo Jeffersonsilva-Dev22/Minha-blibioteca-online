@@ -62,4 +62,4 @@ A versão de demonstração usa o GitHub Pages.
 
 ### Leitor de PDF
 
-No cadastro ou na edição, anexe um PDF de até 25 MB. Abra os detalhes do livro e selecione **Ler PDF** para usar o visualizador nativo do navegador. Se ele não estiver disponível, baixe o anexo pelo link no leitor. Os PDFs ficam no IndexedDB do navegador e não são enviados a um servidor.
+No cadastro ou na edição, anexe um PDF de até 150 MB. Abra os detalhes do livro e selecione **Ler PDF** para usar o visualizador nativo do navegador. Se ele não estiver disponível, baixe o anexo pelo link no leitor. Os PDFs ficam no IndexedDB do navegador e não são enviados a um servidor.
