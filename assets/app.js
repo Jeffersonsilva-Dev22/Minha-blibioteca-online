@@ -1,3 +1,4 @@
+import {bindPdfDictionary} from './pdf-reader.js';
 import {openLibrary, loadLibrary, saveLibrary, getPdf, validatePdf, exportLibrary, readBackup} from './library-storage.js';
 import {loadSearchHistory, rememberSearch, suggestSearch} from './search.js';
 import {GENRES, genreOptions, searchOptions} from './genres.js';
@@ -179,6 +180,7 @@ async function deleteBook() {
   }
 }
 
+const showPdf = bindPdfDictionary();
 let readerUrl;
 let readerPending = false;
 async function openReader(id) {
@@ -190,10 +192,11 @@ async function openReader(id) {
     if (!pdf) throw Error('O PDF não está disponível neste navegador.');
     readerUrl = URL.createObjectURL(pdf);
     $('#pdf-title').textContent = bookTitle(book);
-    $('#pdf-frame').src = readerUrl;
+    $('#pdf-original').href = readerUrl;
     $('#pdf-download').href = readerUrl;
     $('#pdf-download').download = book.pdfName;
     $('#pdf-reader').showModal();
+    void showPdf(readerUrl);
   } catch (error) {
     notify(error.message);
   } finally {
@@ -202,7 +205,7 @@ async function openReader(id) {
 }
 
 $('#pdf-reader').addEventListener('close', () => {
-  $('#pdf-frame').removeAttribute('src');
+  $('#pdf-original').removeAttribute('href');
   $('#pdf-download').removeAttribute('href');
   if (readerUrl) URL.revokeObjectURL(readerUrl);
   readerUrl = undefined;
