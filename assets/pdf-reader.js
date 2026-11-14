@@ -1,12 +1,58 @@
 import {recognizePage} from './pdf-ocr.js';
 
 const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38';
-const DICTIONARY = 'https://api.dicionario-aberto.net/word/';
+const DICTIONARY = 'https://api.dicionario-aberto.net/';
 
 export function dictionaryWord(selection) {
-  const word = selection.normalize('NFC').trim()
+  const word = selection.replace(/\u00ad/g, '').normalize('NFC').trim()
     .replace(/^[^\p{L}]+|[^\p{L}]+$/gu, '').toLocaleLowerCase('pt-BR');
   return word.length <= 64 && /^\p{L}+(?:[-'’]\p{L}+)*$/u.test(word) ? word : '';
+}
+
+export function dictionaryVariants(word) {
+  if (word.length < 4) return [];
+  const variants = new Set();
+  if (/ções$/.test(word)) variants.add(word.replace(/ções$/, 'ção'));
+  if (/ões$/.test(word)) variants.add(word.replace(/ões$/, 'ão'));
+  if (/ais$/.test(word)) variants.add(word.replace(/ais$/, 'al'));
+  if (/res$|zes$/.test(word)) variants.add(word.slice(0, -2));
+  if (word.endsWith('s')) variants.add(word.slice(0, -1));
+  if (/[ai]ram$|eram$/.test(word)) variants.add(word.slice(0, -2));
+  return [...variants];
+}
+
+async function dictionaryRequest(route, word, signal) {
+  const response = await fetch(DICTIONARY + route + '/' + encodeURIComponent(word), {
+    signal, credentials: 'omit', referrerPolicy: 'no-referrer',
+  });
+  if (response.status === 404) return [];
+  if (!response.ok) throw Error('Consulta indisponível.');
+  const entries = await response.json();
+  if (!Array.isArray(entries)) throw Error('Resposta inválida.');
+  return entries;
+}
+
+export async function findDefinition(word, signal) {
+  const parser = new DOMParser();
+  for (const candidate of [word, ...dictionaryVariants(word)]) {
+    const entries = await dictionaryRequest('word', candidate, signal);
+    const definitions = entries.flatMap(entry => typeof entry?.xml === 'string'
+      ? Array.from(parser.parseFromString(entry.xml, 'application/xml').querySelectorAll('def'),
+          node => node.textContent.trim().replace(/\s+/g, ' '))
+      : []).filter(Boolean);
+    if (definitions.length) return {term: candidate, definitions: [...new Set(definitions)].slice(0, 3)};
+  }
+  let suggestions = [];
+  if (word.length >= 4) {
+    try {
+      const nearby = await dictionaryRequest('near', word, signal);
+      suggestions = [...new Set(nearby.filter(item => typeof item === 'string')
+        .map(dictionaryWord).filter(item => item && item !== word))].slice(0, 5);
+    } catch {
+      // The exact lookup has already completed even if suggestions fail.
+    }
+  }
+  return {term: word, definitions: [], suggestions};
 }
 
 export function bindPdfDictionary() {
@@ -17,6 +63,8 @@ export function bindPdfDictionary() {
   const next = dialog.querySelector('#reader-next');
   const counter = dialog.querySelector('#reader-counter');
   const lookup = dialog.querySelector('#dictionary-lookup');
+  const query = dialog.querySelector('#dictionary-word');
+  const suggestions = dialog.querySelector('#dictionary-suggestions');
   const result = dialog.querySelector('#dictionary-result');
   const source = dialog.querySelector('#dictionary-source');
   const ocrButton = dialog.querySelector('#reader-ocr');
@@ -72,6 +120,9 @@ export function bindPdfDictionary() {
     resetOcr();
     session.ready = false;
     session.word = '';
+    query.value = '';
+    query.disabled = true;
+    suggestions.replaceChildren();
     page.scrollTop = 0;
     result.textContent = '';
     source.hidden = true;
@@ -110,6 +161,7 @@ export function bindPdfDictionary() {
       if (active !== session) return;
       session.number = number;
       session.ready = true;
+      query.disabled = false;
       ocrButton.disabled = false;
       counter.textContent = `Página ${number} de ${pdf.numPages}`;
       previous.disabled = number <= 1;
@@ -133,13 +185,31 @@ export function bindPdfDictionary() {
       && container.contains(range.endContainer);
     if (!inside(page) && !inside(transcript)) return;
     active.word = dictionaryWord(selection.toString());
+    query.value = active.word;
     lookup.disabled = !active.word || Boolean(active.lookup || active.ocr);
   });
 
-  lookup.addEventListener('click', async () => {
+  query.addEventListener('input', () => {
+    if (!active?.ready) return;
+    active.word = dictionaryWord(query.value);
+    lookup.disabled = !active.word || Boolean(active.lookup || active.ocr);
+  });
+
+  suggestions.addEventListener('click', event => {
+    const button = event.target.closest('button');
+    if (!button || !active?.ready || active.lookup || active.ocr) return;
+    query.value = button.textContent;
+    query.dispatchEvent(new Event('input'));
+    dialog.querySelector('#dictionary-form').requestSubmit();
+  });
+
+  dialog.querySelector('#dictionary-form').addEventListener('submit', async event => {
+    event.preventDefault();
     const session = active;
     if (!session?.word || session.lookup || session.ocr) return;
     const word = session.word;
+    query.disabled = true;
+    suggestions.replaceChildren();
     const controller = new AbortController();
     session.lookup = controller;
     ocrButton.disabled = true;
@@ -148,28 +218,29 @@ export function bindPdfDictionary() {
     source.hidden = true;
     const timeout = setTimeout(() => controller.abort(), 10000);
     try {
-      const response = await fetch(DICTIONARY + encodeURIComponent(word), {
-        signal: controller.signal, credentials: 'omit', referrerPolicy: 'no-referrer',
-      });
-      if (!response.ok && response.status !== 404) throw Error('Consulta indisponível.');
-      const entries = response.status === 404 ? [] : await response.json();
-      if (!Array.isArray(entries)) throw Error('Resposta inválida.');
-      const parser = new DOMParser();
-      const definitions = entries.flatMap(entry => typeof entry.xml === 'string'
-        ? Array.from(parser.parseFromString(entry.xml, 'application/xml').querySelectorAll('def'),
-            node => node.textContent.trim().replace(/\s+/g, ' '))
-        : []).filter(Boolean);
+      const found = await findDefinition(word, controller.signal);
       if (active !== session) return;
-      result.textContent = definitions.length
-        ? `${word}: ${[...new Set(definitions)].slice(0, 3).join(' / ')}`
-        : `Nenhuma definição encontrada para “${word}”.`;
-      source.hidden = !definitions.length;
+      if (found.definitions.length) {
+        const heading = found.term === word ? word : `Possível verbete para “${word}”: ${found.term}`;
+        result.textContent = `${heading}: ${found.definitions.join(' / ')}`;
+      } else {
+        result.textContent = `Nenhuma definição encontrada para “${word}”. Confira a grafia ou tente a forma básica da palavra.`;
+        for (const term of found.suggestions) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'btn btn-light me-2 mb-2';
+          button.textContent = term;
+          suggestions.append(button);
+        }
+      }
+      source.hidden = !found.definitions.length;
     } catch {
       if (active === session) result.textContent = 'Dicionário indisponível. Verifique a conexão e tente novamente.';
     } finally {
       clearTimeout(timeout);
       if (active === session) {
         session.lookup = null;
+        query.disabled = false;
         ocrButton.disabled = false;
         lookup.disabled = !session.word;
         previous.disabled = session.number <= 1;
@@ -194,6 +265,9 @@ export function bindPdfDictionary() {
   return async function open(url) {
     const session = {};
     active = session;
+    query.value = '';
+    query.disabled = true;
+    suggestions.replaceChildren();
     counter.textContent = '';
     result.textContent = '';
     page.replaceChildren();

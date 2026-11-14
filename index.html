@@ -25,9 +25,16 @@
     </div>
     <p id="reader-status" role="status"></p>
     <div class="reader-dictionary">
-      <button type="button" id="dictionary-lookup" class="btn btn-primary" disabled>Consultar significado</button>
-      <small>A consulta envia a palavra selecionada ao Dicionário Aberto.</small>
+      <form id="dictionary-form">
+        <label for="dictionary-word">Palavra em português</label>
+        <div class="d-flex flex-wrap gap-2">
+          <input id="dictionary-word" class="form-control w-auto" maxlength="64" autocomplete="off" disabled>
+          <button type="submit" id="dictionary-lookup" class="btn btn-primary" disabled>Consultar significado</button>
+        </div>
+      </form>
+      <small>A consulta envia a palavra do campo ao Dicionário Aberto.</small>
       <p id="dictionary-result" role="status"></p>
+      <div id="dictionary-suggestions" aria-label="Grafias sugeridas"></div>
       <a id="dictionary-source" href="https://dicionario-aberto.net/" target="_blank" rel="noopener" hidden>Fonte: Dicionário Aberto</a>
     </div>
     <div class="reader-controls">
