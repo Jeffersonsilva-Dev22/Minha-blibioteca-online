@@ -9,9 +9,26 @@
 </head>
 <body>
   <aside class="sidebar"><a class="brand" href="#inicio"><span class="brand-icon">▤</span><span>Minha Biblioteca<small>ONLINE · SUA COLEÇÃO PESSOAL</small></span></a><p class="nav-label">SEU ESPAÇO DE LEITURA</p><nav aria-label="Navegação principal"><a href="#inicio">⌂ <span>Visão geral</span></a><a href="#biblioteca">▥ <span>Minha biblioteca</span></a><a href="#estatisticas">◴ <span>Estatísticas</span></a></nav><div class="sidebar-note"><span>UM LIVRO DE CADA VEZ</span><p>Guarde histórias.<br>Descubra novos mundos.</p><small>Organize sua coleção no seu ritmo.</small></div><p class="local-note">◉ Dados salvos neste navegador</p></aside>
-  <div class="workspace"><header class="topbar"><span>Sua próxima história começa aqui</span><button class="btn btn-primary" data-action="add">+ Adicionar livro</button></header><main id="main" tabindex="-1"></main><footer>Minha Biblioteca Online <span>Feita para quem gosta de boas histórias.</span></footer></div>
-  <dialog id="editor" aria-labelledby="editor-title"><form id="book-form"><div class="dialog-heading"><div><span class="eyebrow">SUA COLEÇÃO</span><h2 id="editor-title">Adicionar livro</h2></div><button type="button" class="icon-button" data-action="close-editor" aria-label="Fechar formulário">×</button></div><input name="id" type="hidden"><div class="form-grid" id="fields"></div><p id="form-error" role="alert" class="text-danger"></p><div class="dialog-actions"><button type="button" class="btn btn-light" data-action="close-editor">Cancelar</button><button class="btn btn-primary" type="submit">Salvar livro</button></div></form></dialog>
+  <div class="workspace"><header class="topbar"><span>Sua próxima história começa aqui</span><div class="topbar-actions"><button class="btn btn-light" data-action="backup">Backup</button><button class="btn btn-primary" data-action="add">+ Adicionar livro</button></div></header><main id="main" tabindex="-1"></main><footer>Minha Biblioteca Online <span>Feita para quem gosta de boas histórias.</span></footer></div>
+  <dialog id="editor" aria-labelledby="editor-title"><form id="book-form"><div class="dialog-heading"><div><span class="eyebrow">SUA COLEÇÃO</span><h2 id="editor-title">Adicionar livro</h2></div><button type="button" class="icon-button" data-action="close-editor" aria-label="Fechar formulário">×</button></div><input name="id" type="hidden"><div class="form-grid" id="fields"></div><fieldset class="pdf-field"><legend>PDF do livro</legend><p id="attached-pdf"></p><label for="book-pdf">Selecionar PDF (até 25 MB)</label><input id="book-pdf" name="pdfFile" type="file" accept=".pdf,application/pdf" class="form-control"><label id="remove-pdf-label" hidden><input name="removePdf" type="checkbox"> Remover PDF atual ao salvar</label></fieldset><p id="form-error" role="alert" class="text-danger"></p><div class="dialog-actions"><button type="button" class="btn btn-light" data-action="close-editor">Cancelar</button><button class="btn btn-primary" type="submit">Salvar livro</button></div></form></dialog>
   <dialog id="details" aria-labelledby="detail-title"></dialog>
-  <dialog id="delete-dialog" aria-labelledby="delete-title"><h2 id="delete-title">Excluir livro?</h2><p>O livro e suas anotações serão removidos da coleção deste navegador.</p><div class="dialog-actions"><button class="btn btn-light" data-action="cancel-delete">Cancelar</button><button class="btn btn-danger" data-action="confirm-delete">Excluir livro</button></div></dialog>
+  <dialog id="delete-dialog" aria-labelledby="delete-title"><h2 id="delete-title">Excluir livro?</h2><p>O livro, o PDF e suas anotações serão removidos da coleção deste navegador.</p><div class="dialog-actions"><button class="btn btn-light" data-action="cancel-delete">Cancelar</button><button class="btn btn-danger" data-action="confirm-delete">Excluir livro</button></div></dialog>
+  <dialog id="pdf-reader" aria-labelledby="pdf-title">
+    <div class="dialog-heading"><h2 id="pdf-title"></h2><button type="button" class="icon-button" data-action="close-reader" aria-label="Fechar leitor">×</button></div>
+    <p>Se o navegador não mostrar o leitor, use <a id="pdf-download">Baixar PDF</a>.</p>
+    <iframe id="pdf-frame" title="Leitor de PDF"></iframe>
+  </dialog>
+  <dialog id="backup-dialog" aria-labelledby="backup-title">
+    <div class="dialog-heading"><h2 id="backup-title">Backup da biblioteca</h2><button type="button" class="icon-button" data-action="close-backup" aria-label="Fechar backup">×</button></div>
+    <p>O backup inclui todos os livros, anotações e PDFs. Guarde o arquivo em um local seguro.</p>
+    <button type="button" class="btn btn-primary" data-action="export-backup">Exportar backup</button>
+    <form id="restore-form" class="mt-4">
+      <p>Restaurar adiciona os livros do backup que ainda não estão nesta biblioteca.</p>
+      <label for="backup-file">Arquivo de backup</label>
+      <input id="backup-file" name="backupFile" type="file" class="form-control" accept=".json,application/json" required>
+      <button type="submit" class="btn btn-light mt-2">Restaurar backup</button>
+    </form>
+    <p id="backup-status" role="status" class="mt-3"></p>
+  </dialog>
   <div id="toast" role="status" aria-live="polite"></div><script type="module" src="assets/app.js"></script>
 </body></html>

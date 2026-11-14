@@ -1,9 +1,17 @@
+import {openLibrary, loadLibrary, saveLibrary, getPdf, validatePdf, exportLibrary, readBackup} from './library-storage.js';
 import {loadSearchHistory, rememberSearch, suggestSearch} from './search.js';
 import {GENRES, genreOptions, searchOptions} from './genres.js';
-import {bookTitle, STATUSES,validate,stats,queryBooks,readBooks,saveBooks} from './core.js';
+import {bookTitle, STATUSES,readBooks,validate,stats,queryBooks} from './core.js';
 const $=s=>document.querySelector(s), esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let books=[], storageFailed=false, pendingDelete=null, view='grid';
-try {books=readBooks(localStorage);} catch {storageFailed=true;}
+let database;
+try {
+  database = await openLibrary();
+  books = await loadLibrary(database, {getItem: key => window.localStorage.getItem(key)});
+} catch {
+  storageFailed = true;
+  try { books = readBooks(window.localStorage); } catch { /* No readable legacy collection. */ }
+}
 let searchStorage;
 try { searchStorage = window.localStorage; } catch { /* Search still works without storage. */ }
 let searchHistory = loadSearchHistory(searchStorage);
@@ -26,7 +34,12 @@ function populateSubgenres(selected = '') {
 genreField.addEventListener('change', () => populateSubgenres());
 
 function notify(message) {$('#toast').textContent=message;$('#toast').classList.add('visible');setTimeout(()=>$('#toast').classList.remove('visible'),4000);}
-function persist(next) {if(storageFailed){notify('Armazenamento indisponível ou inválido. Seus dados não foram sobrescritos.');return false;}try {saveBooks(localStorage,next);books=next;return true;}catch {notify('Não foi possível salvar. Verifique o espaço e as permissões do navegador.');return false;}}
+let mutationPending = false;
+async function persist(next, attachments = []) {
+  if (storageFailed) throw Error('O armazenamento da coleção está indisponível.');
+  await saveLibrary(database, books, next, attachments);
+  books = next;
+}
 const progress=b=>Math.round(b.currentPage/b.pages*100);
 function cover(b) {return `<div class="book-cover" style="--cover-hue:${Array.from(b.title).reduce((n,c)=>n+c.charCodeAt(0),0)%70+200}"><span class="cover-fallback"><small>MINHA BIBLIOTECA</small><strong>${esc(bookTitle(b))}</strong><span>${esc(b.author)}</span><i>▤</i></span>${b.cover?`<img src="${esc(b.cover)}" alt="Capa de ${esc(bookTitle(b))}" loading="lazy" referrerpolicy="no-referrer">`:''}</div>`;}
 function card(b){return `<button class="book-card" data-action="details" data-id="${esc(b.id)}">${cover(b)}<div class="book-info"><span class="book-genre">${esc(b.genre)}${b.subgenre?' · '+esc(b.subgenre):''} · ${b.year}</span><h3>${esc(bookTitle(b))}</h3><p>${esc(b.author)}</p><div class="book-meta"><span class="status status-${STATUSES.indexOf(b.status)}">${esc(b.status)}</span>${b.rating?`<span class="stars" aria-label="${b.rating} de 5 estrelas">${'★'.repeat(b.rating)}</span>`:''}</div>${b.status==='Lendo'?`<div class="reading-line"><span>Leitura</span><span>${progress(b)}%</span></div><progress max="100" value="${progress(b)}" aria-label="Progresso de ${esc(bookTitle(b))}"></progress>`:''}</div></button>`;}
@@ -105,9 +118,141 @@ function bindCatalogSearch() {
 }
 
 function renderCatalog(){const filtered=queryBooks(books,filters);$('#result-count').textContent=`${filtered.length} ${filtered.length===1?'livro encontrado':'livros encontrados'}`;$('#catalog').className='catalog '+(view==='list'?'list-view':'');$('#catalog').innerHTML=filtered.length?filtered.map(card).join(''):empty(books.length>0);wireImages();}
-function openEditor(id){const b=books.find(b=>b.id===id);form.reset();genreField.replaceChildren(new Option('Selecione uma categoria', ''));for(const genre of genreOptions(books))genreField.add(new Option(genre,genre));genreField.value=b?.genre??'';populateSubgenres(b?.subgenre);$('#form-error').textContent='';$('#editor-title').textContent=b?'Editar livro':'Adicionar livro';$('#book-form').elements.id.value='';$('#book-form').elements.currentPage.value=0;if(b)Object.entries(b).forEach(([k,v])=>{if($('#book-form').elements.namedItem(k))$('#book-form').elements.namedItem(k).value=v;});$('#details').close();$('#editor').showModal();}
-function showDetails(id){const b=books.find(b=>b.id===id);if(!b)return;$('#details').innerHTML=`<div class="dialog-heading"><span class="eyebrow">UM LIVRO DA SUA COLEÇÃO</span><button class="icon-button" data-action="close-details" aria-label="Fechar detalhes">×</button></div><div class="detail-layout">${cover(b)}<div><span class="book-genre">${esc(b.genre)}${b.subgenre?' · '+esc(b.subgenre):''}</span><h2 id="detail-title">${esc(bookTitle(b))}</h2><p>${esc(b.author)} · ${b.year}</p><span class="status status-${STATUSES.indexOf(b.status)}">${b.status}</span><p class="mt-3">${b.rating?'★'.repeat(b.rating)+' · '+b.rating+'/5':'Sem avaliação'}</p><p>ISBN: ${esc(b.isbn)||'Não informado'}</p><p>${b.currentPage} de ${b.pages} páginas · ${progress(b)}%</p><progress value="${b.currentPage}" max="${b.pages}" aria-label="Progresso da leitura"></progress><p class="mt-3">Início: ${formatDate(b.startDate)}<br>Conclusão: ${formatDate(b.endDate)}</p></div></div><h3 class="mt-4">Sinopse</h3><p class="preserve">${esc(b.synopsis)||'Nenhuma sinopse cadastrada.'}</p><h3>Anotações pessoais</h3><p class="preserve">${esc(b.notes)||'Nenhuma anotação por enquanto.'}</p><div class="dialog-actions"><button class="btn btn-outline-danger" data-action="delete" data-id="${esc(b.id)}">Excluir</button><button class="btn btn-primary" data-action="edit" data-id="${esc(b.id)}">Editar livro e progresso</button></div>`;$('#details').showModal();wireImages();}
+function openEditor(id){const b=books.find(b=>b.id===id);form.reset();$('#attached-pdf').textContent=b?.pdfName??'Nenhum PDF anexado';$('#remove-pdf-label').hidden=!b?.pdfName;genreField.replaceChildren(new Option('Selecione uma categoria', ''));for(const genre of genreOptions(books))genreField.add(new Option(genre,genre));genreField.value=b?.genre??'';populateSubgenres(b?.subgenre);$('#form-error').textContent='';$('#editor-title').textContent=b?'Editar livro':'Adicionar livro';$('#book-form').elements.id.value='';$('#book-form').elements.currentPage.value=0;if(b)Object.entries(b).forEach(([k,v])=>{if($('#book-form').elements.namedItem(k) && k!=='pdfFile' && k!=='removePdf')$('#book-form').elements.namedItem(k).value=v;});$('#details').close();$('#editor').showModal();}
+function showDetails(id){const b=books.find(b=>b.id===id);if(!b)return;$('#details').innerHTML=`<div class="dialog-heading"><span class="eyebrow">UM LIVRO DA SUA COLEÇÃO</span><button class="icon-button" data-action="close-details" aria-label="Fechar detalhes">×</button></div><div class="detail-layout">${cover(b)}<div><span class="book-genre">${esc(b.genre)}${b.subgenre?' · '+esc(b.subgenre):''}</span><h2 id="detail-title">${esc(bookTitle(b))}</h2><p>${esc(b.author)} · ${b.year}</p><span class="status status-${STATUSES.indexOf(b.status)}">${b.status}</span><p class="mt-3">${b.rating?'★'.repeat(b.rating)+' · '+b.rating+'/5':'Sem avaliação'}</p><p>ISBN: ${esc(b.isbn)||'Não informado'}</p><p>${b.currentPage} de ${b.pages} páginas · ${progress(b)}%</p><progress value="${b.currentPage}" max="${b.pages}" aria-label="Progresso da leitura"></progress><p class="mt-3">Início: ${formatDate(b.startDate)}<br>Conclusão: ${formatDate(b.endDate)}</p></div></div><h3 class="mt-4">Sinopse</h3><p class="preserve">${esc(b.synopsis)||'Nenhuma sinopse cadastrada.'}</p><h3>Anotações pessoais</h3><p class="preserve">${esc(b.notes)||'Nenhuma anotação por enquanto.'}</p><div class="dialog-actions">${b.pdfName?`<button class="btn btn-primary" data-action="read-pdf" data-id="${esc(b.id)}">Ler PDF</button>`:''}<button class="btn btn-outline-danger" data-action="delete" data-id="${esc(b.id)}">Excluir</button><button class="btn btn-primary" data-action="edit" data-id="${esc(b.id)}">Editar livro e progresso</button></div>`;$('#details').showModal();wireImages();}
 function formatDate(date){return date?date.split('-').reverse().join('/'):'Não informada';}
-document.addEventListener('click',e=>{const target=e.target.closest('[data-action]');if(!target)return;const {action,id}=target.dataset;if(action==='add')openEditor();if(action==='edit')openEditor(id);if(action==='details')showDetails(id);if(action==='close-editor')$('#editor').close();if(action==='close-details')$('#details').close();if(action==='delete'){pendingDelete=id;$('#delete-dialog').showModal();}if(action==='cancel-delete'){$('#delete-dialog').close();pendingDelete=null;}if(action==='confirm-delete'){if(persist(books.filter(b=>b.id!==pendingDelete))){$('#delete-dialog').close();$('#details').close();pendingDelete=null;render();notify('Livro excluído da coleção.');}}if(action==='grid'||action==='list'){view=action;render();}});
-$('#book-form').addEventListener('submit',e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));for(const field of ['pages','currentPage','year','rating'])data[field]=Number(data[field]);try {const previous=books.find(b=>b.id===data.id);const book=validate({...data,id:previous?.id||crypto.randomUUID(),createdAt:previous?.createdAt||new Date().toISOString()});if(persist(previous?books.map(b=>b.id===book.id?book:b):[...books,book])){$('#editor').close();render();notify(previous?'Livro atualizado.':'Livro adicionado à sua biblioteca.');}}catch(error){$('#form-error').textContent=error.message;}});
+document.addEventListener('click',e=>{const target=e.target.closest('[data-action]');if(!target)return;const {action,id}=target.dataset;if(action==='add')openEditor();if(action==='edit')openEditor(id);if(action==='details')showDetails(id);if(action==='close-editor'&&!mutationPending)$('#editor').close();if(action==='close-details')$('#details').close();if(action==='delete'){pendingDelete=id;$('#delete-dialog').showModal();}if(action==='cancel-delete'&&!mutationPending){$('#delete-dialog').close();pendingDelete=null;}if(action==='confirm-delete')deleteBook();if(action==='read-pdf')openReader(id);if(action==='close-reader')$('#pdf-reader').close();if(action==='backup')$('#backup-dialog').showModal();if(action==='close-backup'&&!mutationPending)$('#backup-dialog').close();if(action==='export-backup')downloadBackup();if(action==='grid'||action==='list'){view=action;render();}});
+form.addEventListener('submit', async event => {
+  event.preventDefault();
+  if (mutationPending) return;
+  mutationPending = true;
+  const submit = form.querySelector('[type=submit]');
+  submit.disabled = true;
+  const error = $('#form-error');
+  error.textContent = '';
+  try {
+    const {pdfFile, removePdf, ...data} = Object.fromEntries(new FormData(form));
+    for (const field of ['pages', 'currentPage', 'year', 'rating']) data[field] = Number(data[field]);
+    const previous = books.find(book => book.id === data.id);
+    const book = validate({
+      ...data, id: previous?.id ?? crypto.randomUUID(),
+      createdAt: previous?.createdAt ?? new Date().toISOString(),
+      pdfName: pdfFile?.name ? pdfFile.name : removePdf ? '' : previous?.pdfName ?? '',
+    });
+    const changes = pdfFile?.name ? [[book.id, await validatePdf(pdfFile)]]
+      : removePdf ? [[book.id, null]] : [];
+    const next = previous ? books.map(item => item.id === book.id ? book : item) : [...books, book];
+    await persist(next, changes);
+    $('#editor').close();
+    render();
+    notify(previous ? 'Livro atualizado.' : 'Livro adicionado à biblioteca.');
+  } catch (failure) {
+    error.textContent = failure.message;
+  } finally {
+    mutationPending = false;
+    submit.disabled = false;
+  }
+});
+
+async function deleteBook() {
+  if (!pendingDelete || mutationPending) return;
+  const id = pendingDelete;
+  mutationPending = true;
+  try {
+    await persist(books.filter(book => book.id !== id), [[id, null]]);
+    $('#delete-dialog').close();
+    $('#details').close();
+    pendingDelete = null;
+    render();
+    notify('Livro excluído da coleção.');
+  } catch (error) {
+    notify(error.message);
+  } finally {
+    mutationPending = false;
+  }
+}
+
+let readerUrl;
+let readerPending = false;
+async function openReader(id) {
+  const book = books.find(item => item.id === id);
+  if (!book || readerPending || $('#pdf-reader').open) return;
+  readerPending = true;
+  try {
+    const pdf = await getPdf(database, id);
+    if (!pdf) throw Error('O PDF não está disponível neste navegador.');
+    readerUrl = URL.createObjectURL(pdf);
+    $('#pdf-title').textContent = bookTitle(book);
+    $('#pdf-frame').src = readerUrl;
+    $('#pdf-download').href = readerUrl;
+    $('#pdf-download').download = book.pdfName;
+    $('#pdf-reader').showModal();
+  } catch (error) {
+    notify(error.message);
+  } finally {
+    readerPending = false;
+  }
+}
+
+$('#pdf-reader').addEventListener('close', () => {
+  $('#pdf-frame').removeAttribute('src');
+  $('#pdf-download').removeAttribute('href');
+  if (readerUrl) URL.revokeObjectURL(readerUrl);
+  readerUrl = undefined;
+});
+
+let exportPending = false;
+async function downloadBackup() {
+  if (exportPending) return;
+  exportPending = true;
+  const status = $('#backup-status');
+  status.textContent = 'Preparando backup…';
+  try {
+    if (storageFailed) throw Error('A coleção está indisponível.');
+    const backup = await exportLibrary(database);
+    const url = URL.createObjectURL(backup);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'minha-biblioteca-backup.json';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    status.textContent = 'Backup preparado para download.';
+  } catch (error) {
+    status.textContent = error.message;
+  } finally {
+    exportPending = false;
+  }
+}
+
+$('#restore-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (mutationPending) return;
+  mutationPending = true;
+  const restore = event.currentTarget;
+  const button = restore.querySelector('button');
+  button.disabled = true;
+  const status = $('#backup-status');
+  status.textContent = 'Lendo backup…';
+  try {
+    const imported = await readBackup(restore.elements.backupFile.files[0]);
+    const existing = new Set(books.map(book => book.id));
+    const added = imported.books.filter(book => !existing.has(book.id));
+    const pdfs = added.filter(book => book.pdfName).map(book => [book.id, imported.attachments.get(book.id)]);
+    await persist([...books, ...added], pdfs);
+    restore.reset();
+    render();
+    status.textContent = `Livros importados: ${added.length}. Já existentes: ${imported.books.length - added.length}.`;
+  } catch (error) {
+    status.textContent = error.message;
+  } finally {
+    mutationPending = false;
+    button.disabled = false;
+  }
+});
+
+for (const selector of ['#editor', '#delete-dialog', '#backup-dialog']) {
+  $(selector).addEventListener('cancel', event => {
+    if (mutationPending) event.preventDefault();
+  });
+}
 window.addEventListener('hashchange',()=>{render();$('#main').focus();});render();

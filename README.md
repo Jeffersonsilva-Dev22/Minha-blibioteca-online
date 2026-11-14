@@ -37,11 +37,11 @@ assets/genres.js    Categorias, subgêneros e sugestões de busca
 tests/core.test.js  Testes da lógica com node:test
 ```
 
-A lógica independente do DOM facilita testes e a futura migração para React. `localStorage` armazena os livros sob a chave `minha-biblioteca:v1`. A coleção começa vazia. Capas são opcionais; sem imagem, o aplicativo gera uma representação tipográfica com título e autor. URLs de capa aceitam apenas HTTP/HTTPS.
+A lógica independente do DOM facilita testes e a futura migração para React. O IndexedDB armazena livros e anexos. Na primeira abertura, os registros da chave antiga `minha-biblioteca:v1` do localStorage são importados automaticamente. A coleção começa vazia. Capas são opcionais; sem imagem, o aplicativo gera uma representação tipográfica com título e autor. URLs de capa aceitam apenas HTTP/HTTPS.
 
 Progresso geral = soma das páginas atuais / soma das páginas totais. Livros concluídos têm a página atual ajustada ao total ao salvar. Média das avaliações considera apenas livros avaliados. O status de conclusão não preenche automaticamente uma data: registre a data real no formulário.
 
-Os dados pertencem ao navegador e à origem utilizados, sem sincronização entre dispositivos. Limpar dados do navegador remove a coleção. Esta fase não oferece contas, backup automático ou servidor. Falhas de escrita são informadas sem atualizar a coleção em memória; dados inválidos na leitura bloqueiam gravações para evitar sobrescrever registros existentes.
+Os dados pertencem ao navegador e à origem utilizados, sem sincronização entre dispositivos. Limpar dados do navegador remove a coleção. Em **Backup**, exporte a coleção e os PDFs juntos em JSON. A restauração acrescenta registros ausentes e preserva os livros que já existem. Falhas de escrita são informadas sem atualizar a coleção em memória; dados inválidos na leitura bloqueiam gravações para evitar sobrescrever registros existentes.
 
 ## Verificação
 
@@ -59,3 +59,7 @@ Roteiro manual: cadastrar um livro; recarregar e confirmar persistência; editar
 
 React e Bootstrap no frontend; ASP.NET Core Web API com C#, Entity Framework Core e MySQL no backend. Cadastro/login, autenticação segura e autorização por usuário deverão garantir que cada biblioteca seja acessível somente ao seu proprietário. A Fase 2 ainda não foi iniciada.
 A versão de demonstração usa o GitHub Pages.
+
+### Leitor de PDF
+
+No cadastro ou na edição, anexe um PDF de até 25 MB. Abra os detalhes do livro e selecione **Ler PDF** para usar o visualizador nativo do navegador. Se ele não estiver disponível, baixe o anexo pelo link no leitor. Os PDFs ficam no IndexedDB do navegador e não são enviados a um servidor.
