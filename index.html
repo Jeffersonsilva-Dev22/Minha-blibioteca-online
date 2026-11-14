@@ -30,6 +30,14 @@
       <p id="dictionary-result" role="status"></p>
       <a id="dictionary-source" href="https://dicionario-aberto.net/" target="_blank" rel="noopener" hidden>Fonte: Dicionário Aberto</a>
     </div>
+    <div class="reader-controls">
+      <button type="button" id="reader-ocr" class="btn btn-light" disabled>Reconhecer texto desta página</button>
+    </div>
+    <p id="ocr-status" role="status"></p>
+    <section id="ocr-transcript" aria-labelledby="ocr-heading" hidden>
+      <h3 id="ocr-heading">Texto reconhecido</h3>
+      <pre tabindex="0"></pre>
+    </section>
     <div id="reader-page" aria-label="Página do PDF"></div>
   </dialog>
   <dialog id="backup-dialog" aria-labelledby="backup-title">

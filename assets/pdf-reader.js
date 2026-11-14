@@ -1,3 +1,5 @@
+import {recognizePage} from './pdf-ocr.js';
+
 const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38';
 const DICTIONARY = 'https://api.dicionario-aberto.net/word/';
 
@@ -17,11 +19,57 @@ export function bindPdfDictionary() {
   const lookup = dialog.querySelector('#dictionary-lookup');
   const result = dialog.querySelector('#dictionary-result');
   const source = dialog.querySelector('#dictionary-source');
+  const ocrButton = dialog.querySelector('#reader-ocr');
+  const ocrStatus = dialog.querySelector('#ocr-status');
+  const transcript = dialog.querySelector('#ocr-transcript');
   let active;
+
+  function resetOcr() {
+    ocrButton.disabled = true;
+    ocrStatus.textContent = '';
+    transcript.hidden = true;
+    transcript.querySelector('pre').textContent = '';
+  }
+
+  ocrButton.addEventListener('click', async () => {
+    const session = active;
+    if (!session?.ready || session.ocr || session.lookup) return;
+    const controller = new AbortController();
+    session.ocr = controller;
+    ocrButton.disabled = previous.disabled = next.disabled = lookup.disabled = true;
+    ocrStatus.textContent = 'Preparando OCR em português…';
+    try {
+      const text = await recognizePage(page.querySelector('canvas'), {
+        signal: controller.signal,
+        onProgress: percent => {
+          ocrStatus.textContent = `Reconhecendo texto: ${percent}%`;
+        },
+      });
+      if (active !== session) return;
+      transcript.querySelector('pre').textContent = text;
+      transcript.hidden = !text;
+      ocrStatus.textContent = text
+        ? 'Selecione uma palavra no texto reconhecido e clique em Consultar significado.'
+        : 'Nenhum texto foi reconhecido nesta página.';
+    } catch {
+      if (active === session) {
+        ocrStatus.textContent = 'Não foi possível reconhecer o texto. Verifique a conexão e tente novamente.';
+      }
+    } finally {
+      if (active === session) {
+        session.ocr = undefined;
+        ocrButton.disabled = false;
+        lookup.disabled = !session.word;
+        previous.disabled = session.number <= 1;
+        next.disabled = session.number >= session.pdf.numPages;
+      }
+    }
+  });
 
   async function renderPage(session, number) {
     const {pdf, library} = session;
     previous.disabled = next.disabled = lookup.disabled = true;
+    resetOcr();
     session.ready = false;
     session.word = '';
     page.scrollTop = 0;
@@ -62,6 +110,7 @@ export function bindPdfDictionary() {
       if (active !== session) return;
       session.number = number;
       session.ready = true;
+      ocrButton.disabled = false;
       counter.textContent = `Página ${number} de ${pdf.numPages}`;
       previous.disabled = number <= 1;
       next.disabled = number >= pdf.numPages;
@@ -80,17 +129,20 @@ export function bindPdfDictionary() {
     const selection = document.getSelection();
     if (!selection?.rangeCount || selection.isCollapsed) return;
     const range = selection.getRangeAt(0);
-    if (!page.contains(range.startContainer) || !page.contains(range.endContainer)) return;
+    const inside = container => container.contains(range.startContainer)
+      && container.contains(range.endContainer);
+    if (!inside(page) && !inside(transcript)) return;
     active.word = dictionaryWord(selection.toString());
-    lookup.disabled = !active.word || Boolean(active.lookup);
+    lookup.disabled = !active.word || Boolean(active.lookup || active.ocr);
   });
 
   lookup.addEventListener('click', async () => {
     const session = active;
-    if (!session?.word || session.lookup) return;
+    if (!session?.word || session.lookup || session.ocr) return;
     const word = session.word;
     const controller = new AbortController();
     session.lookup = controller;
+    ocrButton.disabled = true;
     lookup.disabled = previous.disabled = next.disabled = true;
     result.textContent = `Consultando “${word}”…`;
     source.hidden = true;
@@ -118,6 +170,7 @@ export function bindPdfDictionary() {
       clearTimeout(timeout);
       if (active === session) {
         session.lookup = null;
+        ocrButton.disabled = false;
         lookup.disabled = !session.word;
         previous.disabled = session.number <= 1;
         next.disabled = session.number >= session.pdf.numPages;
@@ -130,6 +183,8 @@ export function bindPdfDictionary() {
     active = undefined;
     if (!session) return;
     session.lookup?.abort();
+    session.ocr?.abort();
+    resetOcr();
     session.render?.cancel();
     session.text?.cancel();
     session.task?.destroy().catch(() => {});

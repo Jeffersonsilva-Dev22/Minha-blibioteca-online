@@ -37,3 +37,6 @@
 #reader-page { overflow: auto; max-height: 62vh; background: #eef1f6; }
 .pdf-sheet { position: relative; margin-inline: auto; }
 .pdf-sheet canvas { display: block; width: 100%; height: 100%; }
+
+#ocr-transcript { margin-bottom: 12px; padding: 12px; background: #f1f5ff; border-radius: 8px; }
+#ocr-transcript pre { max-height: 35vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; user-select: text; }
