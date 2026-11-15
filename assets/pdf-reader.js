@@ -9,6 +9,20 @@ export function dictionaryWord(selection) {
   return word.length <= 64 && /^\p{L}+(?:[-'’]\p{L}+)*$/u.test(word) ? word : '';
 }
 
+const CHRONOLOGY = {
+  'antes de cristo': 'Antes de Cristo (a.C.) indica anos anteriores ao início da era cristã. O século V a.C. vai de 500 a.C. a 401 a.C.',
+  'depois de cristo': 'Depois de Cristo (d.C.) indica anos contados a partir do início da era cristã.',
+};
+
+export function chronologicalTerm(selection, preceding = '') {
+  const expression = selection.normalize('NFC').toLocaleLowerCase('pt-BR')
+    .replace(/\s+/g, ' ').trim().replace(/[.,;:!?]+$/, '');
+  if (Object.hasOwn(CHRONOLOGY, expression)) return expression;
+  if (dictionaryWord(selection) !== 'cristo') return '';
+  const match = preceding.match(/\b(antes|depois)\s+de\s*$/i);
+  return match ? match[1].toLowerCase() + ' de cristo' : '';
+}
+
 export function dictionaryVariants(word) {
   if (word.length < 4) return [];
   const variants = new Set();
@@ -184,14 +198,20 @@ export function bindPdfDictionary() {
     const inside = container => container.contains(range.startContainer)
       && container.contains(range.endContainer);
     if (!inside(page) && !inside(transcript)) return;
-    active.word = dictionaryWord(selection.toString());
+    const container = inside(transcript) ? transcript : page;
+    const before = document.createRange();
+    before.selectNodeContents(container);
+    before.setEnd(range.startContainer, range.startOffset);
+    const preceding = before.toString().slice(-80);
+    const expression = chronologicalTerm(selection.toString(), preceding);
+    active.word = expression || dictionaryWord(selection.toString());
     query.value = active.word;
     lookup.disabled = !active.word || Boolean(active.lookup || active.ocr);
   });
 
   query.addEventListener('input', () => {
     if (!active?.ready) return;
-    active.word = dictionaryWord(query.value);
+    active.word = chronologicalTerm(query.value) || dictionaryWord(query.value);
     lookup.disabled = !active.word || Boolean(active.lookup || active.ocr);
   });
 
@@ -208,6 +228,12 @@ export function bindPdfDictionary() {
     const session = active;
     if (!session?.word || session.lookup || session.ocr) return;
     const word = session.word;
+    if (Object.hasOwn(CHRONOLOGY, word)) {
+      suggestions.replaceChildren();
+      source.hidden = true;
+      result.textContent = CHRONOLOGY[word];
+      return;
+    }
     query.disabled = true;
     suggestions.replaceChildren();
     const controller = new AbortController();
