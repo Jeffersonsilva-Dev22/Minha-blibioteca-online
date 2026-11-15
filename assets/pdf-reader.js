@@ -1,6 +1,6 @@
 import {recognizePage} from './pdf-ocr.js';
 
-const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38';
+import {openPdfDocument} from './pdf-document.js';
 const DICTIONARY = 'https://api.dicionario-aberto.net/';
 
 export function dictionaryWord(selection) {
@@ -329,17 +329,14 @@ export function bindPdfDictionary(saveProgress) {
     previous.disabled = next.disabled = lookup.disabled = true;
     status.textContent = 'Carregando leitor…';
     try {
-      const library = await import(PDFJS + '/build/pdf.min.mjs');
-      if (active !== session) return;
-      library.GlobalWorkerOptions.workerSrc = PDFJS + '/build/pdf.worker.min.mjs';
+      const {library, task} = await openPdfDocument(url);
+      if (active !== session) {
+        await task.destroy();
+        return;
+      }
       session.library = library;
-      session.task = library.getDocument({
-        url, isEvalSupported: false,
-        cMapUrl: PDFJS + '/cmaps/', cMapPacked: true,
-        standardFontDataUrl: PDFJS + '/standard_fonts/',
-        wasmUrl: PDFJS + '/wasm/',
-      });
-      session.pdf = await session.task.promise;
+      session.task = task;
+      session.pdf = await task.promise;
       const initialPage = Number.isInteger(savedPage)
         ? Math.min(session.pdf.numPages, Math.max(1, savedPage)) : 1;
       if (active === session) await renderPage(session, initialPage);

@@ -1,3 +1,4 @@
+import {countPdfPages} from './pdf-document.js';
 import {bindPdfDictionary} from './pdf-reader.js';
 import {openLibrary, loadLibrary, saveLibrary, getPdf, validatePdf, exportLibrary, readBackup} from './library-storage.js';
 import {loadSearchHistory, rememberSearch, suggestSearch} from './search.js';
@@ -20,6 +21,45 @@ const filters={search:'',genre:'',status:'',sort:'recent'};
 const fieldDefinitions=[['title','Título principal','text',true],['subtitle','Subtítulo (opcional)','text'],['author','Autor','text',true],['genre','Categoria principal','genre',true],['subgenre','Subgênero','subgenre'],['year','Ano da obra (opcional)','number'],['yearEra','Era','era'],['yearApproximate','Ano aproximado','checkbox'],['isbn','ISBN (opcional)','text'],['pages','Total de páginas','number',true],['currentPage','Página atual','number'],['cover','URL da capa (opcional)','url'],['status','Status de leitura','select'],['rating','Avaliação pessoal','rating'],['startDate','Início da leitura','date'],['endDate','Conclusão da leitura','date'],['synopsis','Sinopse','textarea'],['notes','Anotações pessoais','textarea']];
 $('#fields').innerHTML=fieldDefinitions.map(([name,label,type,required])=>`<label class="${type==='textarea'?'wide':''}">${label}${required?' *':''}${type==='era'?'<select name="yearEra" class="form-select"><option value="ad">d.C.</option><option value="bc">a.C.</option></select>':type==='checkbox'?'<input name="yearApproximate" type="checkbox" class="form-check-input">':type==='genre'||type==='subgenre'?`<select name="${name}" class="form-select" ${required?'required':''}></select>`:type==='select'?`<select name="${name}" class="form-select">${STATUSES.map(s=>`<option>${s}</option>`).join('')}</select>`:type==='rating'?`<select name="rating" class="form-select"><option value="0">Sem avaliação</option>${[1,2,3,4,5].map(n=>`<option value="${n}">${n} ${n===1?'estrela':'estrelas'}</option>`).join('')}</select>`:type==='textarea'?`<textarea name="${name}" class="form-control" rows="3" maxlength="10000"></textarea>`:`<input name="${name}" type="${type}" class="form-control" ${required?'required':''} ${type==='number'?`min="${name==='currentPage'?0:1}" max="${name==='year'?9999:1000000}" step="1"`:''} ${type==='text'?'maxlength="300"':''}>`}</label>`).join('');
 const form = $('#book-form');
+const pdfInput = form.elements.pdfFile;
+const pagesInput = form.elements.pages;
+const countStatus = $('#pdf-count-status');
+let pendingCount;
+
+function resetPdfCount() {
+  pendingCount = undefined;
+  pagesInput.readOnly = false;
+  countStatus.textContent = '';
+}
+
+function countSelectedPdf(file) {
+  if (pendingCount?.file === file) return pendingCount.promise;
+  const promise = (async () => {
+    const attachment = await validatePdf(file);
+    const total = await countPdfPages(attachment);
+    return {attachment, total};
+  })();
+  pendingCount = {file, promise};
+  return promise;
+}
+
+pdfInput.addEventListener('change', async () => {
+  resetPdfCount();
+  const file = pdfInput.files[0];
+  if (!file) return;
+  pagesInput.readOnly = true;
+  countStatus.textContent = 'Contando páginas do PDF…';
+  const request = countSelectedPdf(file);
+  try {
+    const {total} = await request;
+    if (pendingCount?.promise !== request) return;
+    pagesInput.value = total;
+    countStatus.textContent = `Total detectado: ${total} ${total === 1 ? 'página' : 'páginas'}.`;
+  } catch {
+    if (pendingCount?.promise !== request) return;
+    countStatus.textContent = 'Não foi possível contar as páginas. Selecione um PDF válido e sem senha.';
+  }
+});
 const genreField = form.elements.genre;
 const subgenreField = form.elements.subgenre;
 
@@ -119,7 +159,7 @@ function bindCatalogSearch() {
 }
 
 function renderCatalog(){const filtered=queryBooks(books,filters);$('#result-count').textContent=`${filtered.length} ${filtered.length===1?'livro encontrado':'livros encontrados'}`;$('#catalog').className='catalog '+(view==='list'?'list-view':'');$('#catalog').innerHTML=filtered.length?filtered.map(card).join(''):empty(books.length>0);wireImages();}
-function openEditor(id){const b=books.find(b=>b.id===id);form.reset();$('#attached-pdf').textContent=b?.pdfName??'Nenhum PDF anexado';$('#remove-pdf-label').hidden=!b?.pdfName;genreField.replaceChildren(new Option('Selecione uma categoria', ''));for(const genre of genreOptions(books))genreField.add(new Option(genre,genre));genreField.value=b?.genre??'';populateSubgenres(b?.subgenre);$('#form-error').textContent='';$('#editor-title').textContent=b?'Editar livro':'Adicionar livro';$('#book-form').elements.id.value='';$('#book-form').elements.currentPage.value=0;if(b)Object.entries(b).forEach(([k,v])=>{if($('#book-form').elements.namedItem(k) && k!=='pdfFile' && k!=='removePdf' && !['year','yearEra','yearApproximate'].includes(k))$('#book-form').elements.namedItem(k).value=v;});
+function openEditor(id){const b=books.find(b=>b.id===id);form.reset();resetPdfCount();$('#attached-pdf').textContent=b?.pdfName??'Nenhum PDF anexado';$('#remove-pdf-label').hidden=!b?.pdfName;genreField.replaceChildren(new Option('Selecione uma categoria', ''));for(const genre of genreOptions(books))genreField.add(new Option(genre,genre));genreField.value=b?.genre??'';populateSubgenres(b?.subgenre);$('#form-error').textContent='';$('#editor-title').textContent=b?'Editar livro':'Adicionar livro';$('#book-form').elements.id.value='';$('#book-form').elements.currentPage.value=0;if(b)Object.entries(b).forEach(([k,v])=>{if($('#book-form').elements.namedItem(k) && k!=='pdfFile' && k!=='removePdf' && !['year','yearEra','yearApproximate'].includes(k))$('#book-form').elements.namedItem(k).value=v;});
   form.elements.year.value = b?.year == null ? '' : Math.abs(b.year);
   form.elements.yearEra.value = b?.year < 0 ? 'bc' : 'ad';
   form.elements.yearApproximate.checked = b?.yearApproximate === true;
@@ -134,21 +174,37 @@ form.addEventListener('submit', async event => {
   if (mutationPending) return;
   mutationPending = true;
   const submit = form.querySelector('[type=submit]');
-  submit.disabled = true;
+  submit.disabled = pdfInput.disabled = true;
   const error = $('#form-error');
   error.textContent = '';
   try {
-    const {pdfFile, removePdf, yearEra, yearApproximate, ...data} = Object.fromEntries(new FormData(form));
+    const {pdfFile: _file, removePdf, yearEra, yearApproximate, ...data} = Object.fromEntries(new FormData(form));
+    const file = pdfInput.files[0];
+    let pdf;
+    if (file) {
+      try {
+        pdf = await countSelectedPdf(file);
+      } catch (failure) {
+        pendingCount = undefined;
+        if (failure.name === 'PasswordException') throw Error('O PDF está protegido por senha.');
+        if (failure.message?.startsWith('Escolha um PDF') || failure.message?.includes('não é um PDF válido')) throw failure;
+        throw Error('Não foi possível contar as páginas. Selecione um PDF válido e sem senha.');
+      }
+      data.pages = pdf.total;
+    }
     for (const field of ['pages', 'currentPage', 'rating']) data[field] = Number(data[field]);
     const previous = books.find(book => book.id === data.id);
+    if (pdf && previous && data.currentPage === previous.currentPage) {
+      data.currentPage = Math.min(data.currentPage, pdf.total);
+    }
     const book = validate({
       ...data, year: parseWorkYear(data.year, yearEra), yearApproximate: yearApproximate === 'on',
       id: previous?.id ?? crypto.randomUUID(),
       createdAt: previous?.createdAt ?? new Date().toISOString(),
-      pdfReadingPage: pdfFile?.name || removePdf ? undefined : previous?.pdfReadingPage,
-      pdfName: pdfFile?.name ? pdfFile.name : removePdf ? '' : previous?.pdfName ?? '',
+      pdfReadingPage: file?.name || removePdf ? undefined : previous?.pdfReadingPage,
+      pdfName: file?.name ? file.name : removePdf ? '' : previous?.pdfName ?? '',
     });
-    const changes = pdfFile?.name ? [[book.id, await validatePdf(pdfFile)]]
+    const changes = pdf ? [[book.id, pdf.attachment]]
       : removePdf ? [[book.id, null]] : [];
     const next = previous ? books.map(item => item.id === book.id ? book : item) : [...books, book];
     await persist(next, changes);
@@ -159,7 +215,7 @@ form.addEventListener('submit', async event => {
     error.textContent = failure.message;
   } finally {
     mutationPending = false;
-    submit.disabled = false;
+    submit.disabled = pdfInput.disabled = false;
   }
 });
 
