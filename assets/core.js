@@ -54,3 +54,11 @@ export function readBooks(storage) {
   const ids=new Set(); return books.map(b=>{if(typeof b.id!=='string'||!b.id||ids.has(b.id)||typeof b.createdAt!=='string'||!Number.isFinite(Date.parse(b.createdAt))) throw Error('Registro inválido.'); ids.add(b.id);return validate(b);});
 }
 export function saveBooks(storage, books) {storage.setItem(KEY,JSON.stringify(books));}
+
+export function progressFromPdf(book, page, total) {
+  if (!Number.isInteger(page) || !Number.isInteger(total) || page < 1 || page > total) {
+    throw Error('A página do PDF está fora do intervalo.');
+  }
+  const updated = validate({...book, pages: total, currentPage: page});
+  return {...updated, pdfReadingPage: page};
+}

@@ -69,7 +69,7 @@ export async function findDefinition(word, signal) {
   return {term: word, definitions: [], suggestions};
 }
 
-export function bindPdfDictionary() {
+export function bindPdfDictionary(saveProgress) {
   const dialog = document.querySelector('#pdf-reader');
   const page = dialog.querySelector('#reader-page');
   const status = dialog.querySelector('#reader-status');
@@ -84,7 +84,31 @@ export function bindPdfDictionary() {
   const ocrButton = dialog.querySelector('#reader-ocr');
   const ocrStatus = dialog.querySelector('#ocr-status');
   const transcript = dialog.querySelector('#ocr-transcript');
+  const saveButton = dialog.querySelector('#reader-save-progress');
+  const progressStatus = dialog.querySelector('#reader-progress-status');
   let active;
+
+  saveButton.addEventListener('click', async () => {
+    const session = active;
+    if (!session?.ready || session.saving) return;
+    const number = session.number;
+    const total = session.pdf.numPages;
+    session.saving = true;
+    saveButton.disabled = true;
+    progressStatus.textContent = 'Salvando progresso…';
+    try {
+      const updated = await saveProgress(session.bookId, number, total);
+      if (active !== session) return;
+      progressStatus.textContent = updated.status === 'Concluído'
+        ? `Posição salva na página ${number} de ${total}. Livro continua concluído.`
+        : `Progresso salvo: página ${number} de ${total}.`;
+    } catch (error) {
+      if (active === session) progressStatus.textContent = error.message || 'Não foi possível salvar.';
+    } finally {
+      session.saving = false;
+      if (active === session) saveButton.disabled = !session.ready;
+    }
+  });
 
   function resetOcr() {
     ocrButton.disabled = true;
@@ -133,6 +157,7 @@ export function bindPdfDictionary() {
     previous.disabled = next.disabled = lookup.disabled = true;
     resetOcr();
     session.ready = false;
+    saveButton.disabled = true;
     session.word = '';
     query.value = '';
     query.disabled = true;
@@ -175,6 +200,7 @@ export function bindPdfDictionary() {
       if (active !== session) return;
       session.number = number;
       session.ready = true;
+      saveButton.disabled = session.saving === true;
       query.disabled = false;
       ocrButton.disabled = false;
       counter.textContent = `Página ${number} de ${pdf.numPages}`;
@@ -288,8 +314,10 @@ export function bindPdfDictionary() {
     page.replaceChildren();
   });
 
-  return async function open(url) {
-    const session = {};
+  return async function open(url, bookId, savedPage) {
+    const session = {bookId};
+    saveButton.disabled = true;
+    progressStatus.textContent = '';
     active = session;
     query.value = '';
     query.disabled = true;
@@ -312,7 +340,9 @@ export function bindPdfDictionary() {
         wasmUrl: PDFJS + '/wasm/',
       });
       session.pdf = await session.task.promise;
-      if (active === session) await renderPage(session, 1);
+      const initialPage = Number.isInteger(savedPage)
+        ? Math.min(session.pdf.numPages, Math.max(1, savedPage)) : 1;
+      if (active === session) await renderPage(session, initialPage);
     } catch {
       if (active === session) status.textContent = 'Leitor integrado indisponível. Use Abrir PDF original.';
     }

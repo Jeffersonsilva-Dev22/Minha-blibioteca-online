@@ -2,7 +2,7 @@ import {bindPdfDictionary} from './pdf-reader.js';
 import {openLibrary, loadLibrary, saveLibrary, getPdf, validatePdf, exportLibrary, readBackup} from './library-storage.js';
 import {loadSearchHistory, rememberSearch, suggestSearch} from './search.js';
 import {GENRES, genreOptions, searchOptions} from './genres.js';
-import {formatWorkYear, parseWorkYear, bookTitle, STATUSES,readBooks,validate,stats,queryBooks} from './core.js';
+import {progressFromPdf, formatWorkYear, parseWorkYear, bookTitle, STATUSES,readBooks,validate,stats,queryBooks} from './core.js';
 const $=s=>document.querySelector(s), esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let books=[], storageFailed=false, pendingDelete=null, view='grid';
 let database;
@@ -128,7 +128,7 @@ function openEditor(id){const b=books.find(b=>b.id===id);form.reset();$('#attach
 }
 function showDetails(id){const b=books.find(b=>b.id===id);if(!b)return;$('#details').innerHTML=`<div class="dialog-heading"><span class="eyebrow">UM LIVRO DA SUA COLEÇÃO</span><button class="icon-button" data-action="close-details" aria-label="Fechar detalhes">×</button></div><div class="detail-layout">${cover(b)}<div><span class="book-genre">${esc(b.genre)}${b.subgenre?' · '+esc(b.subgenre):''}</span><h2 id="detail-title">${esc(bookTitle(b))}</h2><p>${esc(b.author)} · ${formatWorkYear(b)}</p><span class="status status-${STATUSES.indexOf(b.status)}">${b.status}</span><p class="mt-3">${b.rating?'★'.repeat(b.rating)+' · '+b.rating+'/5':'Sem avaliação'}</p><p>ISBN: ${esc(b.isbn)||'Não informado'}</p><p>${b.currentPage} de ${b.pages} páginas · ${progress(b)}%</p><progress value="${b.currentPage}" max="${b.pages}" aria-label="Progresso da leitura"></progress><p class="mt-3">Início: ${formatDate(b.startDate)}<br>Conclusão: ${formatDate(b.endDate)}</p></div></div><h3 class="mt-4">Sinopse</h3><p class="preserve">${esc(b.synopsis)||'Nenhuma sinopse cadastrada.'}</p><h3>Anotações pessoais</h3><p class="preserve">${esc(b.notes)||'Nenhuma anotação por enquanto.'}</p><div class="dialog-actions">${b.pdfName?`<button class="btn btn-primary" data-action="read-pdf" data-id="${esc(b.id)}">Ler PDF</button>`:''}<button class="btn btn-outline-danger" data-action="delete" data-id="${esc(b.id)}">Excluir</button><button class="btn btn-primary" data-action="edit" data-id="${esc(b.id)}">Editar livro e progresso</button></div>`;$('#details').showModal();wireImages();}
 function formatDate(date){return date?date.split('-').reverse().join('/'):'Não informada';}
-document.addEventListener('click',e=>{const target=e.target.closest('[data-action]');if(!target)return;const {action,id}=target.dataset;if(action==='add')openEditor();if(action==='edit')openEditor(id);if(action==='details')showDetails(id);if(action==='close-editor'&&!mutationPending)$('#editor').close();if(action==='close-details')$('#details').close();if(action==='delete'){pendingDelete=id;$('#delete-dialog').showModal();}if(action==='cancel-delete'&&!mutationPending){$('#delete-dialog').close();pendingDelete=null;}if(action==='confirm-delete')deleteBook();if(action==='read-pdf')openReader(id);if(action==='close-reader')$('#pdf-reader').close();if(action==='backup')$('#backup-dialog').showModal();if(action==='close-backup'&&!mutationPending)$('#backup-dialog').close();if(action==='export-backup')downloadBackup();if(action==='grid'||action==='list'){view=action;render();}});
+document.addEventListener('click',e=>{const target=e.target.closest('[data-action]');if(!target)return;const {action,id}=target.dataset;if(action==='add')openEditor();if(action==='edit')openEditor(id);if(action==='details')showDetails(id);if(action==='close-editor'&&!mutationPending)$('#editor').close();if(action==='close-details')$('#details').close();if(action==='delete'){pendingDelete=id;$('#delete-dialog').showModal();}if(action==='cancel-delete'&&!mutationPending){$('#delete-dialog').close();pendingDelete=null;}if(action==='confirm-delete')deleteBook();if(action==='read-pdf')openReader(id);if(action==='close-reader'&&!mutationPending)$('#pdf-reader').close();if(action==='backup')$('#backup-dialog').showModal();if(action==='close-backup'&&!mutationPending)$('#backup-dialog').close();if(action==='export-backup')downloadBackup();if(action==='grid'||action==='list'){view=action;render();}});
 form.addEventListener('submit', async event => {
   event.preventDefault();
   if (mutationPending) return;
@@ -145,6 +145,7 @@ form.addEventListener('submit', async event => {
       ...data, year: parseWorkYear(data.year, yearEra), yearApproximate: yearApproximate === 'on',
       id: previous?.id ?? crypto.randomUUID(),
       createdAt: previous?.createdAt ?? new Date().toISOString(),
+      pdfReadingPage: pdfFile?.name || removePdf ? undefined : previous?.pdfReadingPage,
       pdfName: pdfFile?.name ? pdfFile.name : removePdf ? '' : previous?.pdfName ?? '',
     });
     const changes = pdfFile?.name ? [[book.id, await validatePdf(pdfFile)]]
@@ -180,7 +181,23 @@ async function deleteBook() {
   }
 }
 
-const showPdf = bindPdfDictionary();
+let updatedReaderBook;
+const showPdf = bindPdfDictionary(async (id, page, total) => {
+  if (mutationPending) throw Error('Aguarde a operação em andamento.');
+  const book = books.find(item => item.id === id);
+  if (!book) throw Error('Livro não encontrado.');
+
+  mutationPending = true;
+  try {
+    const updated = progressFromPdf(book, page, total);
+    await persist(books.map(item => item.id === id ? updated : item));
+    updatedReaderBook = id;
+    render();
+    return updated;
+  } finally {
+    mutationPending = false;
+  }
+});
 let readerUrl;
 let readerPending = false;
 async function openReader(id) {
@@ -196,7 +213,7 @@ async function openReader(id) {
     $('#pdf-download').href = readerUrl;
     $('#pdf-download').download = book.pdfName;
     $('#pdf-reader').showModal();
-    void showPdf(readerUrl);
+    void showPdf(readerUrl, book.id, book.status === 'Concluído' ? book.pdfReadingPage ?? book.currentPage : book.currentPage);
   } catch (error) {
     notify(error.message);
   } finally {
@@ -209,6 +226,11 @@ $('#pdf-reader').addEventListener('close', () => {
   $('#pdf-download').removeAttribute('href');
   if (readerUrl) URL.revokeObjectURL(readerUrl);
   readerUrl = undefined;
+  if (updatedReaderBook && $('#details').open) {
+    $('#details').close();
+    showDetails(updatedReaderBook);
+  }
+  updatedReaderBook = undefined;
 });
 
 let exportPending = false;
@@ -260,7 +282,7 @@ $('#restore-form').addEventListener('submit', async event => {
   }
 });
 
-for (const selector of ['#editor', '#delete-dialog', '#backup-dialog']) {
+for (const selector of ['#editor', '#delete-dialog', '#backup-dialog', '#pdf-reader']) {
   $(selector).addEventListener('cancel', event => {
     if (mutationPending) event.preventDefault();
   });
