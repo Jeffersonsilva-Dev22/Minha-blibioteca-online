@@ -1,4 +1,4 @@
-import {readBooks} from './core.js';
+import {bookTitle, readBooks} from './core.js';
 
 const DB_NAME = 'minha-biblioteca';
 const KEY = 'collection';
@@ -50,7 +50,36 @@ export async function loadLibrary(db, legacy) {
   return books;
 }
 
+export async function ensureUniquePdfs(books, attachments, readPdf) {
+  const incoming = attachments.filter(([, file]) => file);
+  if (!incoming.length) return;
+
+  const changed = new Set(attachments.map(([id]) => id));
+  const sizes = new Set(incoming.map(([, file]) => file.size));
+  const owners = new Map(books.map(book => [book.id, book]));
+  const fingerprints = new Map();
+
+  async function remember(id, file, isIncoming) {
+    const bytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+    const key = file.size + ':' + Array.from(new Uint8Array(bytes),
+      byte => byte.toString(16).padStart(2, '0')).join('');
+    const existing = fingerprints.get(key);
+    if (isIncoming && existing && existing !== id) {
+      throw Error(`Este PDF já está associado ao livro “${bookTitle(owners.get(existing))}”.`);
+    }
+    if (!existing) fingerprints.set(key, id);
+  }
+
+  for (const book of books) {
+    if (!book.pdfName || changed.has(book.id)) continue;
+    const file = await readPdf(book.id);
+    if (file && sizes.has(file.size)) await remember(book.id, file, false);
+  }
+  for (const [id, file] of incoming) await remember(id, file, true);
+}
+
 export async function saveLibrary(db, previous, next, attachments = []) {
+  await ensureUniquePdfs(next, attachments, id => getPdf(db, id));
   const transaction = db.transaction(['library', 'pdfs'], 'readwrite');
   const done = transactionDone(transaction);
   const library = transaction.objectStore('library');
