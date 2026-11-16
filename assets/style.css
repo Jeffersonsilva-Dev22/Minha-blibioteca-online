@@ -50,9 +50,7 @@
   display: grid;
   place-items: center;
   height: 84px;
-  border: 1px solid #ead1ae;
-  border-radius: 12px;
-  background: #fff4e4;
+  background: transparent;
 }
 .brand-logo img {
   display: block;
