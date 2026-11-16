@@ -40,3 +40,19 @@
 
 #ocr-transcript { margin-bottom: 12px; padding: 12px; background: #f1f5ff; border-radius: 8px; }
 #ocr-transcript pre { max-height: 35vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; user-select: text; }
+
+.brand-logo {
+  display: grid;
+  place-items: center;
+  flex: 0 0 64px;
+  height: 44px;
+  border-radius: 10px;
+  background: #fff4e4;
+}
+.brand-logo img {
+  display: block;
+  width: 60px;
+  height: 30px;
+  object-fit: cover;
+  object-position: center;
+}
