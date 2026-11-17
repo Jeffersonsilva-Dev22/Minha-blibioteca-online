@@ -19,15 +19,23 @@ try {
 applyTheme(preference);
 
 document.addEventListener('DOMContentLoaded', () => {
-  const selector = document.querySelector('#theme-select');
-  selector.value = preference;
-  selector.addEventListener('change', () => {
-    preference = validTheme(selector.value);
-    applyTheme(preference);
-    try {
-      localStorage.setItem(THEME_KEY, preference);
-    } catch {
-      // Keep the selected theme for this visit.
+  const buttons = document.querySelectorAll('[data-display-mode]');
+  function updateButtons() {
+    for (const button of buttons) {
+      button.setAttribute('aria-pressed', String(button.dataset.displayMode === preference));
     }
-  });
+  }
+  updateButtons();
+  for (const button of buttons) {
+    button.addEventListener('click', () => {
+      preference = validTheme(button.dataset.displayMode);
+      applyTheme(preference);
+      updateButtons();
+      try {
+        localStorage.setItem(THEME_KEY, preference);
+      } catch {
+        // Keep the selected theme for this visit.
+      }
+    });
+  }
 });
