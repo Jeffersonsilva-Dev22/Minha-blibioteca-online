@@ -112,7 +112,7 @@
   border-radius: 8px;
   background: transparent;
 }
-.theme-button[aria-pressed="true"] {
+#theme-toggle[aria-expanded="true"] {
   border-color: var(--blue);
   background: var(--theme-tint, #edf2ff);
 }
@@ -120,3 +120,20 @@
 .theme-button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .theme-button img { display: block; }
 [data-theme="dark"] .theme-button img { filter: brightness(1.65); }
+
+.theme-control { position: relative; }
+#theme-options:not([hidden]) {
+  position: absolute;
+  inset-block-start: calc(100% + 6px);
+  inset-inline-start: 0;
+  z-index: 10;
+  display: flex;
+  gap: 5px;
+  padding: 5px;
+  background: var(--theme-surface, #fff);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 16px #0003;
+}
+
+.theme-button[hidden] { display: none; }
