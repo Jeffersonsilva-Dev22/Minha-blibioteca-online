@@ -102,3 +102,16 @@
   line-height: 1.7;
 }
 [data-theme="reading"] .pdf-sheet canvas { filter: sepia(.27); }
+
+.theme-icon {
+  flex: 0 0 26px;
+  height: 26px;
+  background: var(--mode-icon, url("mode-light.png")) center / contain no-repeat;
+}
+[data-theme="dark"] .theme-icon {
+  --mode-icon: url("mode-dark.png");
+  filter: brightness(1.65);
+}
+[data-theme="reading"] .theme-icon {
+  --mode-icon: url("mode-reading.png");
+}
