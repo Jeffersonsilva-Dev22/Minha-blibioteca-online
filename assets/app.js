@@ -85,7 +85,19 @@ const progress=b=>Math.round(b.currentPage/b.pages*100);
 function cover(b) {return `<div class="book-cover" style="--cover-hue:${Array.from(b.title).reduce((n,c)=>n+c.charCodeAt(0),0)%70+200}"><span class="cover-fallback"><small>MINHA BIBLIOTECA</small><strong>${esc(bookTitle(b))}</strong><span>${esc(b.author)}</span><i>▤</i></span>${b.cover?`<img src="${esc(b.cover)}" alt="Capa de ${esc(bookTitle(b))}" loading="lazy" referrerpolicy="no-referrer">`:''}</div>`;}
 function card(b){return `<button class="book-card" data-action="details" data-id="${esc(b.id)}">${cover(b)}<div class="book-info"><span class="book-genre">${esc(b.genre)}${b.subgenre?' · '+esc(b.subgenre):''} · ${formatWorkYear(b)}</span><h3>${esc(bookTitle(b))}</h3><p>${esc(b.author)}</p><div class="book-meta"><span class="status status-${STATUSES.indexOf(b.status)}">${esc(b.status)}</span>${b.rating?`<span class="stars" aria-label="${b.rating} de 5 estrelas">${'★'.repeat(b.rating)}</span>`:''}</div>${(b.status==='Lendo'||b.currentPage>0)?`<div class="reading-line"><span>Leitura</span><span>${progress(b)}%</span></div><progress max="100" value="${progress(b)}" aria-label="Progresso de ${esc(bookTitle(b))}"></progress>`:''}</div></button>`;}
 function wireImages(){document.querySelectorAll('.book-cover img').forEach(img=>img.addEventListener('error',()=>img.remove(),{once:true}));}
-function metrics(s){return `<div class="metrics">${[['Livros na coleção',s.total,'▥'],['Leituras concluídas',s.completed,'✓'],['Lendo agora',s.reading,'▤'],['Quero ler',s.wanted,'◇']].map(([label,n,icon])=>`<article class="metric"><span class="metric-icon">${icon}</span><p>${label}</p><strong>${n}</strong></article>`).join('')}</div>`;}
+function metrics(s) {
+  const cards = [
+    ['Livros na coleção', s.total, 'livros-na-colecao'],
+    ['Leituras concluídas', s.completed, 'leituras-concluidas'],
+    ['Lendo agora', s.reading, 'lendo-agora'],
+    ['Quero ler', s.wanted, 'quero-ler'],
+  ];
+  return `<div class="metrics">${cards.map(([label, count, icon]) => `
+    <article class="metric">
+      <span class="metric-icon"><img src="assets/metric-${icon}.png" alt="" width="24" height="24"></span>
+      <p>${label}</p><strong>${count}</strong>
+    </article>`).join('')}</div>`;
+}
 function empty(filtered=false){return `<div class="empty"><span>▤</span><h3>${filtered?'Nenhum livro encontrado':'Uma estante cheia de possibilidades'}</h3><p>${filtered?'Experimente outra pesquisa ou ajuste os filtros.':'Cadastre seu primeiro livro e comece a contar sua história de leitura.'}</p>${filtered?'':'<button class="btn btn-primary" data-action="add">+ Adicionar meu primeiro livro</button>'}</div>`;}
 function render(){const route=location.hash.slice(1)||'inicio',s=stats(books);document.querySelectorAll('nav a').forEach(a=>{const active=a.hash===`#${route}`;a.classList.toggle('active',active);if(active)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
 const warning=storageFailed?'<div class="alert alert-warning" role="alert">Não foi possível ler os dados locais. Para proteger sua coleção, o salvamento está bloqueado. Verifique as permissões e faça uma cópia dos dados do navegador antes de tentar recuperá-los.</div>':'';
