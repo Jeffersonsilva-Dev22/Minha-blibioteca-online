@@ -1,3 +1,4 @@
+import {bindReaderFullscreen} from './reader-fullscreen.js';
 import {recognizePage} from './pdf-ocr.js';
 
 import {openPdfDocument} from './pdf-document.js';
@@ -71,6 +72,7 @@ export async function findDefinition(word, signal) {
 
 export function bindPdfDictionary(saveProgress) {
   const dialog = document.querySelector('#pdf-reader');
+  bindReaderFullscreen(dialog);
   const page = dialog.querySelector('#reader-page');
   const status = dialog.querySelector('#reader-status');
   const previous = dialog.querySelector('#reader-previous');
