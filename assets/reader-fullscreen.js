@@ -5,8 +5,10 @@ export function bindReaderFullscreen(dialog) {
 
   function update() {
     const expanded = document.fullscreenElement === dialog || dialog.classList.contains('reader-expanded');
+    dialog.classList.toggle('reader-focused', expanded);
     button.textContent = expanded ? 'Sair da tela cheia' : 'Tela cheia';
     button.setAttribute('aria-pressed', String(expanded));
+    if (!expanded) dialog.classList.remove('reader-controls-visible');
   }
 
   async function exit() {
@@ -56,5 +58,23 @@ export function bindReaderFullscreen(dialog) {
     message.textContent = '';
     void exit().catch(() => {});
   });
+  const navigation = dialog.querySelector('.reader-navigation');
+  let hideControls;
+  function showControls() {
+    if (!dialog.classList.contains('reader-focused')) return;
+    dialog.classList.add('reader-controls-visible');
+    clearTimeout(hideControls);
+    hideControls = setTimeout(() => {
+      if (!navigation.contains(document.activeElement)) {
+        dialog.classList.remove('reader-controls-visible');
+      }
+    }, 2500);
+  }
+  dialog.addEventListener('pointermove', showControls);
+  dialog.addEventListener('pointerdown', showControls);
+  navigation.addEventListener('focusin', showControls);
+  dialog.addEventListener('close', () => clearTimeout(hideControls));
+  document.addEventListener('fullscreenchange', showControls);
+  button.addEventListener('click', showControls);
   update();
 }

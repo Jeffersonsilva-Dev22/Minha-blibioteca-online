@@ -89,3 +89,44 @@
   min-height: 65vh;
 }
 #pdf-reader :is(#reader-fullscreen-status, #reader-progress-status):empty { display: none; }
+
+/* Fullscreen reading keeps the PDF in view and reveals controls on interaction. */
+#pdf-reader.reader-focused {
+  padding: 0;
+  overflow: hidden;
+}
+#pdf-reader.reader-focused > :not(#reader-page):not(.reader-navigation) {
+  display: none;
+}
+#pdf-reader.reader-focused #reader-page {
+  width: 100%;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+}
+#pdf-reader.reader-focused .reader-navigation {
+  position: absolute;
+  inset: 12px 12px auto auto;
+  z-index: 20;
+  max-width: calc(100% - 24px);
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--theme-surface, #fff);
+  box-shadow: 0 4px 18px #0003;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+}
+#pdf-reader.reader-focused .reader-navigation a { display: none; }
+#pdf-reader.reader-focused.reader-controls-visible .reader-navigation,
+#pdf-reader.reader-focused .reader-navigation:focus-within,
+#pdf-reader.reader-focused .reader-navigation:hover {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  #pdf-reader.reader-focused .reader-navigation { transition: none; }
+}
