@@ -102,15 +102,26 @@ export function bindPdfDictionary(saveProgress) {
     zoomLevel.textContent = active ? Math.round(active.zoom * 100) + '%' : '100%';
   }
 
-  async function changeZoom(value) {
-    if (!active?.ready || active.lookup || active.ocr) return;
-    active.zoom = Math.min(3, Math.max(0.5, Math.round(value * 100) / 100));
-    await renderPage(active, active.number);
+  async function changeZoom(value, control) {
+    const session = active;
+    if (!session?.ready || session.lookup || session.ocr) return;
+    const oldSheet = page.querySelector('.pdf-sheet');
+    const oldWidth = oldSheet?.getBoundingClientRect().width || 1;
+    const oldHeight = oldSheet?.getBoundingClientRect().height || 1;
+    const centerX = (page.scrollLeft + page.clientWidth / 2) / oldWidth;
+    const centerY = (page.scrollTop + page.clientHeight / 2) / oldHeight;
+    session.zoom = Math.min(3, Math.max(0.5, Math.round(value * 100) / 100));
+    await renderPage(session, session.number);
+    if (active !== session || !session.ready) return;
+    const sheet = page.querySelector('.pdf-sheet');
+    page.scrollLeft = centerX * sheet.getBoundingClientRect().width - page.clientWidth / 2;
+    page.scrollTop = centerY * sheet.getBoundingClientRect().height - page.clientHeight / 2;
+    const focusTarget = control.disabled ? zoomFit : control;
+    focusTarget.focus({preventScroll: true});
   }
-  zoomOut.addEventListener('click', () => active && changeZoom(active.zoom - 0.25));
-  zoomIn.addEventListener('click', () => active && changeZoom(active.zoom + 0.25));
-  zoomFit.addEventListener('click', () => changeZoom(1));
-
+  zoomOut.addEventListener('click', () => active && changeZoom(active.zoom - 0.25, zoomOut));
+  zoomIn.addEventListener('click', () => active && changeZoom(active.zoom + 0.25, zoomIn));
+  zoomFit.addEventListener('click', () => changeZoom(1, zoomFit));
 
   saveButton.addEventListener('click', async () => {
     const session = active;
