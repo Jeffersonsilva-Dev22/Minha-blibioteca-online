@@ -130,3 +130,7 @@
 @media (prefers-reduced-motion: reduce) {
   #pdf-reader.reader-focused .reader-navigation { transition: none; }
 }
+
+.reader-zoom { display: flex; align-items: center; gap: 6px; }
+#reader-zoom-level { min-width: 45px; text-align: center; font-variant-numeric: tabular-nums; }
+#reader-page .pdf-sheet { flex-shrink: 0; }

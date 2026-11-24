@@ -88,7 +88,29 @@ export function bindPdfDictionary(saveProgress) {
   const transcript = dialog.querySelector('#ocr-transcript');
   const saveButton = dialog.querySelector('#reader-save-progress');
   const progressStatus = dialog.querySelector('#reader-progress-status');
+  const zoomOut = dialog.querySelector('#reader-zoom-out');
+  const zoomIn = dialog.querySelector('#reader-zoom-in');
+  const zoomFit = dialog.querySelector('#reader-zoom-fit');
+  const zoomLevel = dialog.querySelector('#reader-zoom-level');
   let active;
+
+  function updateZoom() {
+    const busy = !active?.ready || active.lookup || active.ocr;
+    zoomOut.disabled = Boolean(busy) || active.zoom <= 0.5;
+    zoomIn.disabled = Boolean(busy) || active.zoom >= 3;
+    zoomFit.disabled = Boolean(busy);
+    zoomLevel.textContent = active ? Math.round(active.zoom * 100) + '%' : '100%';
+  }
+
+  async function changeZoom(value) {
+    if (!active?.ready || active.lookup || active.ocr) return;
+    active.zoom = Math.min(3, Math.max(0.5, Math.round(value * 100) / 100));
+    await renderPage(active, active.number);
+  }
+  zoomOut.addEventListener('click', () => changeZoom(active.zoom - 0.25));
+  zoomIn.addEventListener('click', () => changeZoom(active.zoom + 0.25));
+  zoomFit.addEventListener('click', () => changeZoom(1));
+
 
   saveButton.addEventListener('click', async () => {
     const session = active;
@@ -159,6 +181,7 @@ export function bindPdfDictionary(saveProgress) {
     previous.disabled = next.disabled = lookup.disabled = true;
     resetOcr();
     session.ready = false;
+    updateZoom();
     saveButton.disabled = true;
     session.word = '';
     query.value = '';
@@ -174,7 +197,7 @@ export function bindPdfDictionary(saveProgress) {
       const pdfPage = await pdf.getPage(number);
       if (active !== session) return;
       const original = pdfPage.getViewport({scale: 1});
-      const viewport = pdfPage.getViewport({scale: Math.min(1.5, page.clientWidth / original.width)});
+      const viewport = pdfPage.getViewport({scale: Math.min(1.5, page.clientWidth / original.width) * session.zoom});
       const sheet = document.createElement('div');
       sheet.className = 'pdf-sheet';
       sheet.style.width = viewport.width + 'px';
@@ -202,6 +225,7 @@ export function bindPdfDictionary(saveProgress) {
       if (active !== session) return;
       session.number = number;
       session.ready = true;
+      updateZoom();
       saveButton.disabled = session.saving === true;
       query.disabled = false;
       ocrButton.disabled = false;
@@ -317,10 +341,11 @@ export function bindPdfDictionary(saveProgress) {
   });
 
   return async function open(url, bookId, savedPage) {
-    const session = {bookId};
+    const session = {bookId, zoom: 1};
     saveButton.disabled = true;
     progressStatus.textContent = '';
     active = session;
+    updateZoom();
     query.value = '';
     query.disabled = true;
     suggestions.replaceChildren();
