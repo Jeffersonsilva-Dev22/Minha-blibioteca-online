@@ -1,4 +1,4 @@
-import {bindReaderFullscreen} from './reader-fullscreen.js';
+import {bindReaderFullscreen} from './reader-fullscreen.js?v=zoom-fix-1';
 import {recognizePage} from './pdf-ocr.js';
 
 import {openPdfDocument} from './pdf-document.js';
@@ -107,8 +107,8 @@ export function bindPdfDictionary(saveProgress) {
     active.zoom = Math.min(3, Math.max(0.5, Math.round(value * 100) / 100));
     await renderPage(active, active.number);
   }
-  zoomOut.addEventListener('click', () => changeZoom(active.zoom - 0.25));
-  zoomIn.addEventListener('click', () => changeZoom(active.zoom + 0.25));
+  zoomOut.addEventListener('click', () => active && changeZoom(active.zoom - 0.25));
+  zoomIn.addEventListener('click', () => active && changeZoom(active.zoom + 0.25));
   zoomFit.addEventListener('click', () => changeZoom(1));
 
 

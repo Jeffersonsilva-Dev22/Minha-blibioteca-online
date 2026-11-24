@@ -1,5 +1,5 @@
 import {countPdfPages} from './pdf-document.js';
-import {bindPdfDictionary} from './pdf-reader.js';
+import {bindPdfDictionary} from './pdf-reader.js?v=zoom-fix-1';
 import {openLibrary, loadLibrary, saveLibrary, getPdf, validatePdf, exportLibrary, readBackup} from './library-storage.js';
 import {loadSearchHistory, rememberSearch, suggestSearch} from './search.js';
 import {GENRES, genreOptions, searchOptions} from './genres.js';
